@@ -34,13 +34,16 @@ CREATE TABLE IF NOT EXISTS public.pengaturan_desa (
 
 INSERT INTO public.pengaturan_desa (id, nama_desa, nama_kecamatan, nama_kabupaten, nama_kepala_desa, alamat_kantor, kontak_desa)
 VALUES (1, 'Sukamaju', 'Sukaraja', 'Bogor', 'H. Ahmad Dahlan, S.E.', 'Jl. Raya Desa Sukamaju No. 01', '0812-3456-7890')
-ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
+ON CONFLICT (id) DO UPDATE SET
+    nama_desa = EXCLUDED.nama_desa,
+    nama_kepala_desa = EXCLUDED.nama_kepala_desa,
+    updated_at = NOW();
 
 -- 3. TABEL PROFIL PENGGUNA & APARAT DESA (Mendukung Login PIN Cepat)
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    username TEXT UNIQUE,
+    user_id UUID,
+    username TEXT,
     pin VARCHAR(6) NOT NULL DEFAULT '123456',
     nama_lengkap TEXT NOT NULL,
     role user_role NOT NULL DEFAULT 'rt',
@@ -53,11 +56,23 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Pastikan kolom pin dan username tersedia jika tabel sudah ada sebelumnya
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pin VARCHAR(6) DEFAULT '123456';
+-- Pastikan semua kolom baru & constraint terpasang meski tabel profiles sudah dibuat sebelumnya
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;
+ALTER TABLE public.profiles ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pin VARCHAR(6) DEFAULT '123456';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS jabatan TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS telepon TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS wilayah_dusun TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS wilayah_rw TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS wilayah_rt TEXT;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_username_key') THEN
+        ALTER TABLE public.profiles ADD CONSTRAINT profiles_username_key UNIQUE (username);
+    END IF;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 -- 4. TABEL MASTER WARGA
 CREATE TABLE IF NOT EXISTS public.warga (
@@ -148,16 +163,10 @@ DROP POLICY IF EXISTS "Admin Mengelola Semua Profil Aparat" ON public.profiles;
 CREATE POLICY "Admin Mengelola Semua Profil Aparat" ON public.profiles
 FOR ALL USING (true);
 
--- Warga (Hierarki Sesuai Wilayah)
+-- Warga
 DROP POLICY IF EXISTS "Akses Warga Sesuai Hirarki Role" ON public.warga;
 CREATE POLICY "Akses Warga Sesuai Hirarki Role" ON public.warga
-FOR SELECT USING (
-    -- Jika admin, tampilkan semua
-    -- Jika RT, hanya RT & RW yang sama
-    -- Jika RW, hanya RW yang sama
-    -- Jika Dusun, hanya Dusun yang sama
-    true
-);
+FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin Mengelola Data Warga" ON public.warga;
 CREATE POLICY "Admin Mengelola Data Warga" ON public.warga
