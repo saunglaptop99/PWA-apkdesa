@@ -509,7 +509,7 @@ export default function WargaPage() {
         </span>
       </div>
 
-      {/* TABEL DATA WARGA (RINGKAS: NO KK, NIK, NAMA - KLIK UNTUK DETAIL LENGKAP) */}
+      {/* TABEL DATA WARGA (RINGKAS & PRESISI: NO KK, NIK, NAMA - KLIK UNTUK DETAIL LENGKAP) */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden mb-3">
         {loading ? (
           <div className="text-center py-12">
@@ -523,197 +523,142 @@ export default function WargaPage() {
             <p className="text-[11px] text-slate-400">
               {search
                 ? `Tidak cocok dengan kata kunci "${search}"`
-                : `Belum ada data warga terdaftar untuk wilayah ${profile?.role.toUpperCase()} ${
+                : `Belum ada data warga terdaftar untuk wilayah ${profile?.role?.toUpperCase()} ${
                     profile?.wilayah_rt ? `RT ${profile.wilayah_rt}` : ''
                   }.`}
             </p>
           </div>
         ) : (
-          <>
-            {/* TAMPILAN TABEL DESKTOP & TABLET */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/90 text-[10px] uppercase tracking-wider text-slate-500 font-bold border-b border-slate-200">
-                    <th className="py-2.5 px-3">No. KK</th>
-                    <th className="py-2.5 px-3">NIK</th>
-                    <th className="py-2.5 px-3">Nama Warga</th>
-                    <th className="py-2.5 px-2 text-center">Wilayah</th>
-                    <th className="py-2.5 px-2 text-center">Status</th>
-                    <th className="py-2.5 px-3 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-xs">
-                  {paginatedWarga.map((item) => (
-                    <tr
-                      key={item.id}
-                      onClick={() => setSelectedDetailWarga(item)}
-                      className="hover:bg-teal-50/50 cursor-pointer transition-colors group"
-                    >
-                      <td className="py-2.5 px-3 font-mono font-semibold text-slate-600 text-[11px] whitespace-nowrap">
-                        {item.no_kk}
-                      </td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-800 text-[11px] whitespace-nowrap">
-                        {item.nik}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900 group-hover:text-teal-900">
-                            {item.nama}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            ({item.jenis_kelamin === 'Laki-laki' ? 'L' : 'P'})
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-2 text-center whitespace-nowrap text-[11px] text-slate-600">
-                        RT {item.rt} / RW {item.rw}
-                      </td>
-                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                        <span
-                          className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                            item.status_ekonomi === 'miskin'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : item.status_ekonomi === 'rentan'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}
-                        >
-                          {item.status_ekonomi || 'aktif'}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <span className="text-teal-700 font-bold text-[11px] group-hover:underline inline-flex items-center gap-0.5">
-                          Detail <ChevronRight size={13} />
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* TAMPILAN TABEL BARIS RINGKAS KHUSUS MOBILE (NO KK, NIK, NAMA) */}
-            <div className="sm:hidden divide-y divide-slate-100">
+          <table className="w-full table-fixed border-collapse">
+            <colgroup>
+              <col className="w-[33%]" />
+              <col className="w-[33%]" />
+              <col className="w-[34%]" />
+            </colgroup>
+            <thead>
+              <tr className="bg-slate-100/90 text-[10px] font-black uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                <th className="py-2.5 pl-3 pr-1 text-left">No. KK</th>
+                <th className="py-2.5 px-1 text-left">NIK</th>
+                <th className="py-2.5 pl-1 pr-3 text-left">Nama Warga</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
               {paginatedWarga.map((item) => (
-                <div
+                <tr
                   key={item.id}
                   onClick={() => setSelectedDetailWarga(item)}
-                  className="p-3 hover:bg-teal-50/50 active:bg-teal-100/50 cursor-pointer transition-colors"
+                  className="hover:bg-teal-50/70 active:bg-teal-100/60 cursor-pointer transition-colors group even:bg-slate-50/40"
                 >
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      {/* Baris 1: No. KK & Wilayah */}
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 mb-0.5 font-mono">
-                        <span>KK: <strong className="text-slate-600">{item.no_kk}</strong></span>
-                        <span className="text-slate-500 font-sans font-semibold">
-                          RT {item.rt} / RW {item.rw} • {item.dusun}
+                  <td className="py-2.5 pl-3 pr-1 font-mono text-[11px] font-medium text-slate-600 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {item.no_kk}
+                  </td>
+                  <td className="py-2.5 px-1 font-mono text-[11px] font-bold text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {item.nik}
+                  </td>
+                  <td className="py-2.5 pl-1 pr-3">
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="min-w-0 flex-1 truncate">
+                        <span className="font-extrabold text-slate-900 group-hover:text-teal-900 text-xs truncate block">
+                          {item.nama}
+                        </span>
+                        <span className="text-[9.5px] text-slate-400 block truncate mt-0.5">
+                          {item.jenis_kelamin === 'Laki-laki' ? 'L' : 'P'} • RT {item.rt}/RW {item.rw}
                         </span>
                       </div>
-
-                      {/* Baris 2: NIK */}
-                      <div className="text-xs font-mono font-bold text-slate-800">
-                        NIK: {item.nik}
-                      </div>
-
-                      {/* Baris 3: NAMA */}
-                      <div className="mt-0.5 flex items-center justify-between">
-                        <div className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">
-                          {item.nama}{' '}
-                          <span className="text-[10px] font-normal text-slate-400">
-                            ({item.jenis_kelamin === 'Laki-laki' ? 'L' : 'P'})
-                          </span>
-                        </div>
-                        <span
-                          className={`text-[8.5px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
-                            item.status_ekonomi === 'miskin'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : item.status_ekonomi === 'rentan'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}
-                        >
-                          {item.status_ekonomi || 'aktif'}
-                        </span>
-                      </div>
+                      <ChevronRight
+                        size={14}
+                        className="text-slate-300 group-hover:text-teal-700 flex-shrink-0 transition-transform group-hover:translate-x-0.5"
+                      />
                     </div>
-
-                    <div className="flex items-center self-center pl-1 text-slate-300">
-                      <ChevronRight size={16} />
-                    </div>
-                  </div>
-                </div>
+                  </td>
+                </tr>
               ))}
-            </div>
-          </>
+            </tbody>
+          </table>
         )}
       </div>
 
-      {/* KONTROL PAGINASI (PAGINATION) - MENGHINDARI SCROLLING PANJANG */}
+      {/* KONTROL PAGINASI PRESISI & RAPI (2 BARIS SEIMBANG & ANTI-SQUISHING) */}
       {filtered.length > 0 && (
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 p-3 bg-white rounded-2xl border border-slate-200/90 shadow-sm text-xs text-slate-600">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-500">Tampilkan:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-              className="py-1 px-2 rounded-lg border border-slate-200 font-semibold bg-white text-xs outline-none focus:ring-1 focus:ring-teal-600"
-            >
-              <option value={5}>5 / hal</option>
-              <option value={10}>10 / hal</option>
-              <option value={25}>25 / hal</option>
-              <option value={50}>50 / hal</option>
-            </select>
-            <span className="text-[11px] text-slate-400 font-medium">
-              (Hal. {validCurrentPage} dari {totalPages})
-            </span>
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 space-y-2.5">
+          {/* Baris 1: Info Halaman & Pilihan Baris */}
+          <div className="flex items-center justify-between text-xs text-slate-600 border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-1.5 font-medium text-[11px]">
+              <span className="text-slate-400">Halaman:</span>
+              <span className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100 whitespace-nowrap">
+                {validCurrentPage} dari {totalPages}
+              </span>
+              <span className="text-slate-400 text-[10.5px] whitespace-nowrap">
+                ({totalItems} warga)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <label className="text-[11px] text-slate-400 whitespace-nowrap">Baris:</label>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="py-1 px-2 rounded-lg border border-slate-200 bg-slate-50 font-bold text-slate-700 text-xs outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
+              >
+                <option value={5}>5 baris</option>
+                <option value={10}>10 baris</option>
+                <option value={20}>20 baris</option>
+                <option value={50}>50 baris</option>
+              </select>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          {/* Baris 2: Tombol Navigasi Halaman Seimbang */}
+          <div className="flex items-center justify-between gap-1.5">
             <button
+              type="button"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={validCurrentPage <= 1}
-              className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs flex items-center gap-1 transition-all"
+              className="flex-1 py-1.5 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed font-bold text-xs text-slate-700 flex items-center justify-center gap-1 transition-all shadow-sm"
             >
-              <ChevronLeft size={13} />
+              <ChevronLeft size={14} />
               <span>Sebelumnya</span>
             </button>
 
-            {/* Smart page pills */}
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(
-                (p) =>
-                  p === 1 ||
-                  p === totalPages ||
-                  Math.abs(p - validCurrentPage) <= 1
-              )
-              .map((p, idx, arr) => {
-                const prev = arr[idx - 1];
-                const showEllipsis = prev && p - prev > 1;
-                return (
-                  <React.Fragment key={p}>
-                    {showEllipsis && <span className="px-1 text-slate-400">...</span>}
-                    <button
-                      onClick={() => setCurrentPage(p)}
-                      className={`min-w-[28px] h-7 rounded-xl font-bold text-xs transition-all ${
-                        validCurrentPage === p
-                          ? 'bg-teal-700 text-white shadow-sm'
-                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  </React.Fragment>
-                );
-              })}
+            {/* Smart Page Pills */}
+            <div className="flex items-center gap-1 px-0.5">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(
+                  (p) =>
+                    p === 1 ||
+                    p === totalPages ||
+                    Math.abs(p - validCurrentPage) <= 1
+                )
+                .map((p, idx, arr) => {
+                  const prev = arr[idx - 1];
+                  const showEllipsis = prev && p - prev > 1;
+                  return (
+                    <React.Fragment key={p}>
+                      {showEllipsis && <span className="px-0.5 text-slate-300 font-mono text-[10px]">..</span>}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(p)}
+                        className={`w-7 h-7 rounded-xl font-black text-xs transition-all flex items-center justify-center ${
+                          validCurrentPage === p
+                            ? 'bg-teal-700 text-white shadow-md shadow-teal-900/20'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+            </div>
 
             <button
+              type="button"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={validCurrentPage >= totalPages}
-              className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs flex items-center gap-1 transition-all"
+              className="flex-1 py-1.5 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed font-bold text-xs text-slate-700 flex items-center justify-center gap-1 transition-all shadow-sm"
             >
               <span>Selanjutnya</span>
-              <ChevronRight size={13} />
+              <ChevronRight size={14} />
             </button>
           </div>
         </div>
