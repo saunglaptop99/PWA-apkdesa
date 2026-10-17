@@ -16,9 +16,12 @@ import {
   Settings,
   Bell,
   Building2,
+  Baby,
+  Gift,
+  HeartPulse,
 } from 'lucide-react';
 
-export default function DashboardPage({ setActiveTab }) {
+export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
   const { profile, isOnline } = useAuth();
   const { pengaturanDesa } = useDesa();
 
@@ -318,56 +321,96 @@ export default function DashboardPage({ setActiveTab }) {
         </div>
       </div>
 
-      {/* Shortcut Menu (Akses Cepat) */}
+      {/* Shortcut Menu (Akses Cepat Layanan) */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm mb-4">
         <h3 className="font-bold text-slate-800 text-xs mb-3 flex items-center justify-between">
-          <span>Layanan Cepat Aparat</span>
+          <span>Layanan Terpadu Aparat</span>
           <span className="text-[10px] font-normal text-slate-400">1-Klik Akses</span>
         </h3>
         <div className="grid grid-cols-3 gap-2 text-center">
           <button
+            type="button"
             onClick={() => setActiveTab('warga')}
-            className="p-3 rounded-2xl bg-teal-50/70 hover:bg-teal-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
+            className="p-2.5 rounded-2xl bg-teal-50/70 hover:bg-teal-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
           >
-            <div className="p-2 rounded-xl bg-white text-teal-700 shadow-sm mb-1.5 group-hover:scale-110 transition-transform">
-              <Users size={20} />
+            <div className="p-2 rounded-xl bg-white text-teal-700 shadow-sm mb-1 group-hover:scale-110 transition-transform">
+              <Users size={18} />
             </div>
-            <span className="text-[11px] font-bold text-slate-700">Data Warga</span>
-            <span className="text-[9.5px] text-slate-400">Cari & Cetak</span>
+            <span className="text-[10.5px] font-bold text-slate-700">Data Warga</span>
+            <span className="text-[9px] text-slate-400">Master Kependudukan</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('bansos')}
-            className="p-3 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
+            type="button"
+            onClick={() => (navigateToLayanan ? navigateToLayanan('bansos') : setActiveTab('layanan'))}
+            className="p-2.5 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
           >
-            <div className="p-2 rounded-xl bg-white text-emerald-700 shadow-sm mb-1.5 group-hover:scale-110 transition-transform">
-              <ShieldCheck size={20} />
+            <div className="p-2 rounded-xl bg-white text-emerald-700 shadow-sm mb-1 group-hover:scale-110 transition-transform">
+              <Gift size={18} />
             </div>
-            <span className="text-[11px] font-bold text-slate-700">Cek Bansos</span>
-            <span className="text-[9.5px] text-slate-400">Flagging Miskin</span>
+            <span className="text-[10.5px] font-bold text-slate-700">Bansos Desa</span>
+            <span className="text-[9px] text-slate-400">PKH, BPNT & BLT</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => (navigateToLayanan ? navigateToLayanan('mutasi') : setActiveTab('layanan'))}
+            className="p-2.5 rounded-2xl bg-blue-50/70 hover:bg-blue-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
+          >
+            <div className="p-2 rounded-xl bg-white text-blue-700 shadow-sm mb-1 group-hover:scale-110 transition-transform">
+              <FileSpreadsheet size={18} />
+            </div>
+            <span className="text-[10.5px] font-bold text-slate-700">Mutasi Warga</span>
+            <span className="text-[9px] text-slate-400">Lahir, Wafat, Pindah</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => (navigateToLayanan ? navigateToLayanan('posyandu') : setActiveTab('layanan'))}
+            className="p-2.5 rounded-2xl bg-rose-50/70 hover:bg-rose-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
+          >
+            <div className="p-2 rounded-xl bg-white text-rose-600 shadow-sm mb-1 group-hover:scale-110 transition-transform">
+              <Baby size={18} />
+            </div>
+            <span className="text-[10.5px] font-bold text-slate-700">Posyandu</span>
+            <span className="text-[9px] text-slate-400">Ibu & Stunting</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => (navigateToLayanan ? navigateToLayanan('surat') : setActiveTab('layanan'))}
+            className="p-2.5 rounded-2xl bg-cyan-50/70 hover:bg-cyan-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
+          >
+            <div className="p-2 rounded-xl bg-white text-cyan-700 shadow-sm mb-1 group-hover:scale-110 transition-transform">
+              <FileText size={18} />
+            </div>
+            <span className="text-[10.5px] font-bold text-slate-700">Surat PDF</span>
+            <span className="text-[9px] text-slate-400">Pengantar Resmi</span>
           </button>
 
           {profile?.role === 'admin' ? (
             <button
+              type="button"
               onClick={() => setActiveTab('kelola')}
-              className="p-3 rounded-2xl bg-purple-50/70 hover:bg-purple-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
+              className="p-2.5 rounded-2xl bg-purple-50/70 hover:bg-purple-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
             >
-              <div className="p-2 rounded-xl bg-white text-purple-700 shadow-sm mb-1.5 group-hover:scale-110 transition-transform">
-                <Settings size={20} />
+              <div className="p-2 rounded-xl bg-white text-purple-700 shadow-sm mb-1 group-hover:scale-110 transition-transform">
+                <Settings size={18} />
               </div>
-              <span className="text-[11px] font-bold text-slate-700">Kelola PIN</span>
-              <span className="text-[9.5px] text-slate-400">Desa & Aparat</span>
+              <span className="text-[10.5px] font-bold text-slate-700">Kelola Desa</span>
+              <span className="text-[9px] text-slate-400">Aparat & Wilayah</span>
             </button>
           ) : (
             <button
-              onClick={() => setActiveTab('warga')}
-              className="p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
+              type="button"
+              onClick={() => setActiveTab('profil')}
+              className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
             >
-              <div className="p-2 rounded-xl bg-white text-teal-800 shadow-sm mb-1.5 group-hover:scale-110 transition-transform">
-                <FileText size={20} />
+              <div className="p-2 rounded-xl bg-white text-slate-700 shadow-sm mb-1 group-hover:scale-110 transition-transform">
+                <ShieldCheck size={18} />
               </div>
-              <span className="text-[11px] font-bold text-slate-700">Surat</span>
-              <span className="text-[9.5px] text-slate-400">Pengantar PDF</span>
+              <span className="text-[10.5px] font-bold text-slate-700">Akun Aparat</span>
+              <span className="text-[9px] text-slate-400">Profil & PIN</span>
             </button>
           )}
         </div>

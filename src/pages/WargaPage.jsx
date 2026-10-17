@@ -23,6 +23,12 @@ import {
   ShieldCheck,
   User,
   Info,
+  Phone,
+  Baby,
+  GraduationCap,
+  HeartPulse,
+  Activity,
+  ExternalLink,
 } from 'lucide-react';
 import SuratModal from '../components/surat/SuratModal';
 import ExcelImportExport from '../components/warga/ExcelImportExport';
@@ -39,15 +45,36 @@ const INITIAL_DEMO_WARGA = [
     tempat_lahir: 'Bandung',
     tanggal_lahir: '1985-03-12',
     jenis_kelamin: 'Laki-laki',
+    golongan_darah: 'O',
     agama: 'Islam',
-    pekerjaan: 'Petani',
+    no_akta_lahir: '3201-LT-12031985-001',
+    status_ktp: 'Sudah KTP-el',
     shdk: 'Kepala Keluarga',
+    status_perkawinan: 'Kawin',
+    no_akta_nikah_cerai: 'KUA.10.01/PW.01/123/2010',
+    nama_ayah: 'Sudarmono Kartodirjo',
+    nama_ibu: 'Suparni',
+    pendidikan_terakhir: 'SMA/SMK/Sederajat',
+    status_sekolah: 'Tidak / Sudah Lulus',
+    pekerjaan: 'Petani',
+    rentang_penghasilan: 'Rp 1.000.000 - Rp 2.500.000',
+    status_ekonomi: 'miskin',
+    bansos_pkh: true,
+    bansos_bpnt: true,
+    bansos_blt_desa: false,
+    bpjs_pbi: true,
     dusun: 'Sukamaju',
     rw: '01',
     rt: '01',
     alamat_detail: 'Jl. Melati No. 12 RT 01',
+    status_tempat_tinggal: 'Milik Sendiri',
+    telepon: '0812-9876-5431',
+    status_domisili: 'Penduduk Tetap',
     status_kependudukan: 'aktif',
-    status_ekonomi: 'miskin',
+    is_disabilitas: false,
+    jenis_disabilitas: 'Tidak Ada',
+    penyakit_kronis: 'Tidak Ada',
+    status_kesehatan_khusus: 'Normal',
   },
   {
     id: 'w-2',
@@ -57,15 +84,75 @@ const INITIAL_DEMO_WARGA = [
     tempat_lahir: 'Cianjur',
     tanggal_lahir: '1989-06-15',
     jenis_kelamin: 'Perempuan',
+    golongan_darah: 'A',
     agama: 'Islam',
-    pekerjaan: 'Ibu Rumah Tangga',
+    no_akta_lahir: '3201-LT-15061989-002',
+    status_ktp: 'Sudah KTP-el',
     shdk: 'Istri',
+    status_perkawinan: 'Kawin',
+    no_akta_nikah_cerai: 'KUA.10.01/PW.01/123/2010',
+    nama_ayah: 'Hasan Basri',
+    nama_ibu: 'Maimunah',
+    pendidikan_terakhir: 'SMP/Sederajat',
+    status_sekolah: 'Tidak / Sudah Lulus',
+    pekerjaan: 'Ibu Rumah Tangga',
+    rentang_penghasilan: 'Belum Berpenghasilan',
+    status_ekonomi: 'miskin',
+    bansos_pkh: true,
+    bansos_bpnt: true,
+    bansos_blt_desa: false,
+    bpjs_pbi: true,
     dusun: 'Sukamaju',
     rw: '01',
     rt: '01',
     alamat_detail: 'Jl. Melati No. 12 RT 01',
+    status_tempat_tinggal: 'Milik Sendiri',
+    telepon: '0812-9876-5432',
+    status_domisili: 'Penduduk Tetap',
     status_kependudukan: 'aktif',
+    is_disabilitas: false,
+    jenis_disabilitas: 'Tidak Ada',
+    penyakit_kronis: 'Tidak Ada',
+    status_kesehatan_khusus: 'Ibu Hamil',
+  },
+  {
+    id: 'w-9',
+    nik: '3201011505230009',
+    no_kk: '3201011203850000',
+    nama: 'Rizky Sudarmono',
+    tempat_lahir: 'Bogor',
+    tanggal_lahir: '2023-05-15',
+    jenis_kelamin: 'Laki-laki',
+    golongan_darah: 'O',
+    agama: 'Islam',
+    no_akta_lahir: '3201-AL-15052023-088',
+    status_ktp: 'Belum Wajib KTP',
+    shdk: 'Anak',
+    status_perkawinan: 'Belum Kawin',
+    no_akta_nikah_cerai: '',
+    nama_ayah: 'Bambang Sudarmono',
+    nama_ibu: 'Siti Aminah',
+    pendidikan_terakhir: 'Tidak / Belum Sekolah',
+    status_sekolah: 'Tidak / Belum Sekolah',
+    pekerjaan: 'Belum Bekerja',
+    rentang_penghasilan: 'Belum Berpenghasilan',
     status_ekonomi: 'miskin',
+    bansos_pkh: true,
+    bansos_bpnt: false,
+    bansos_blt_desa: false,
+    bpjs_pbi: true,
+    dusun: 'Sukamaju',
+    rw: '01',
+    rt: '01',
+    alamat_detail: 'Jl. Melati No. 12 RT 01',
+    status_tempat_tinggal: 'Milik Sendiri',
+    telepon: '',
+    status_domisili: 'Penduduk Tetap',
+    status_kependudukan: 'aktif',
+    is_disabilitas: false,
+    jenis_disabilitas: 'Tidak Ada',
+    penyakit_kronis: 'Tidak Ada',
+    status_kesehatan_khusus: 'Balita (0-5 Tahun)',
   },
   {
     id: 'w-6',
@@ -75,18 +162,39 @@ const INITIAL_DEMO_WARGA = [
     tempat_lahir: 'Tasikmalaya',
     tanggal_lahir: '1970-01-01',
     jenis_kelamin: 'Laki-laki',
+    golongan_darah: 'B',
     agama: 'Islam',
-    pekerjaan: 'Buruh Tani',
+    no_akta_lahir: '3201-LT-01011970-006',
+    status_ktp: 'Sudah KTP-el',
     shdk: 'Kepala Keluarga',
+    status_perkawinan: 'Cerai Mati',
+    no_akta_nikah_cerai: 'KUA.10/AC/1998',
+    nama_ayah: 'Kosasih',
+    nama_ibu: 'Rohayati',
+    pendidikan_terakhir: 'SD / Sederajat',
+    status_sekolah: 'Tidak / Sudah Lulus',
+    pekerjaan: 'Buruh Tani',
+    rentang_penghasilan: '< Rp 1.000.000',
+    status_ekonomi: 'miskin',
+    bansos_pkh: false,
+    bansos_bpnt: true,
+    bansos_blt_desa: true,
+    bpjs_pbi: true,
     dusun: 'Sukamaju',
     rw: '01',
     rt: '01',
     alamat_detail: 'Jl. Randu Alas RT 01',
+    status_tempat_tinggal: 'Menumpang',
+    telepon: '',
+    status_domisili: 'Penduduk Tetap',
     status_kependudukan: 'aktif',
-    status_ekonomi: 'miskin',
+    is_disabilitas: true,
+    jenis_disabilitas: 'Fisik',
+    penyakit_kronis: 'Hipertensi',
+    status_kesehatan_khusus: 'Normal',
   },
 
-  // RT 02 / RW 01 (Sukamaju) - Untuk verifikasi login khusus RT 02 / RW 01
+  // RT 02 / RW 01 (Sukamaju)
   {
     id: 'w-3',
     nik: '3201011808920003',
@@ -95,15 +203,36 @@ const INITIAL_DEMO_WARGA = [
     tempat_lahir: 'Sumedang',
     tanggal_lahir: '1992-08-18',
     jenis_kelamin: 'Laki-laki',
+    golongan_darah: 'AB',
     agama: 'Islam',
-    pekerjaan: 'Buruh Harian Lepas',
+    no_akta_lahir: '3201-LT-18081992-003',
+    status_ktp: 'Sudah KTP-el',
     shdk: 'Kepala Keluarga',
+    status_perkawinan: 'Kawin',
+    no_akta_nikah_cerai: 'KUA.10/NK/2016',
+    nama_ayah: 'Endang Supriatna',
+    nama_ibu: 'Tati Warsiti',
+    pendidikan_terakhir: 'SMA/SMK/Sederajat',
+    status_sekolah: 'Tidak / Sudah Lulus',
+    pekerjaan: 'Buruh Harian Lepas',
+    rentang_penghasilan: 'Rp 1.000.000 - Rp 2.500.000',
+    status_ekonomi: 'rentan',
+    bansos_pkh: false,
+    bansos_bpnt: true,
+    bansos_blt_desa: false,
+    bpjs_pbi: true,
     dusun: 'Sukamaju',
     rw: '01',
     rt: '02',
     alamat_detail: 'Kp. Babakan RT 02',
+    status_tempat_tinggal: 'Sewa / Kontrak',
+    telepon: '0857-1234-5678',
+    status_domisili: 'Penduduk Tetap',
     status_kependudukan: 'aktif',
-    status_ekonomi: 'rentan',
+    is_disabilitas: false,
+    jenis_disabilitas: 'Tidak Ada',
+    penyakit_kronis: 'Tidak Ada',
+    status_kesehatan_khusus: 'Normal',
   },
   {
     id: 'w-7',
@@ -113,15 +242,36 @@ const INITIAL_DEMO_WARGA = [
     tempat_lahir: 'Bogor',
     tanggal_lahir: '1994-09-25',
     jenis_kelamin: 'Perempuan',
+    golongan_darah: 'O',
     agama: 'Islam',
-    pekerjaan: 'Karyawan Swasta',
+    no_akta_lahir: '3201-LT-25091994-007',
+    status_ktp: 'Sudah KTP-el',
     shdk: 'Istri',
+    status_perkawinan: 'Kawin',
+    no_akta_nikah_cerai: 'KUA.10/NK/2016',
+    nama_ayah: 'Darmanto',
+    nama_ibu: 'Suratmi',
+    pendidikan_terakhir: 'Sarjana (S1 / D4)',
+    status_sekolah: 'Tidak / Sudah Lulus',
+    pekerjaan: 'Karyawan Swasta',
+    rentang_penghasilan: 'Rp 2.500.000 - Rp 5.000.000',
+    status_ekonomi: 'mampu',
+    bansos_pkh: false,
+    bansos_bpnt: false,
+    bansos_blt_desa: false,
+    bpjs_pbi: false,
     dusun: 'Sukamaju',
     rw: '01',
     rt: '02',
     alamat_detail: 'Kp. Babakan RT 02',
+    status_tempat_tinggal: 'Milik Sendiri',
+    telepon: '0813-8888-7777',
+    status_domisili: 'Penduduk Tetap',
     status_kependudukan: 'aktif',
-    status_ekonomi: 'mampu',
+    is_disabilitas: false,
+    jenis_disabilitas: 'Tidak Ada',
+    penyakit_kronis: 'Tidak Ada',
+    status_kesehatan_khusus: 'Ibu Menyusui',
   },
   {
     id: 'w-8',
@@ -131,15 +281,36 @@ const INITIAL_DEMO_WARGA = [
     tempat_lahir: 'Sukabumi',
     tanggal_lahir: '1990-02-25',
     jenis_kelamin: 'Laki-laki',
+    golongan_darah: 'A',
     agama: 'Islam',
-    pekerjaan: 'Pedagang Warung',
+    no_akta_lahir: '3201-LT-25021990-008',
+    status_ktp: 'Sudah KTP-el',
     shdk: 'Kepala Keluarga',
+    status_perkawinan: 'Kawin',
+    no_akta_nikah_cerai: 'KUA.10/NK/2014',
+    nama_ayah: 'Wijaya',
+    nama_ibu: 'Kokom',
+    pendidikan_terakhir: 'SMA/SMK/Sederajat',
+    status_sekolah: 'Tidak / Sudah Lulus',
+    pekerjaan: 'Pedagang Warung',
+    rentang_penghasilan: 'Rp 1.000.000 - Rp 2.500.000',
+    status_ekonomi: 'miskin',
+    bansos_pkh: false,
+    bansos_bpnt: true,
+    bansos_blt_desa: true,
+    bpjs_pbi: true,
     dusun: 'Sukamaju',
     rw: '01',
     rt: '02',
     alamat_detail: 'Jl. Anggrek No. 8 RT 02',
+    status_tempat_tinggal: 'Milik Sendiri',
+    telepon: '0821-2222-3333',
+    status_domisili: 'Penduduk Tetap',
     status_kependudukan: 'aktif',
-    status_ekonomi: 'miskin',
+    is_disabilitas: false,
+    jenis_disabilitas: 'Tidak Ada',
+    penyakit_kronis: 'Asma',
+    status_kesehatan_khusus: 'Normal',
   },
 
   // RW 02 (Mekarsari)
@@ -151,15 +322,36 @@ const INITIAL_DEMO_WARGA = [
     tempat_lahir: 'Garut',
     tanggal_lahir: '1978-04-22',
     jenis_kelamin: 'Laki-laki',
+    golongan_darah: 'B',
     agama: 'Islam',
-    pekerjaan: 'Wiraswasta',
+    no_akta_lahir: '3201-LT-22041978-004',
+    status_ktp: 'Sudah KTP-el',
     shdk: 'Kepala Keluarga',
+    status_perkawinan: 'Kawin',
+    no_akta_nikah_cerai: 'KUA.10/NK/2003',
+    nama_ayah: 'Gunawan',
+    nama_ibu: 'Neneng',
+    pendidikan_terakhir: 'Sarjana (S1 / D4)',
+    status_sekolah: 'Tidak / Sudah Lulus',
+    pekerjaan: 'Wiraswasta',
+    rentang_penghasilan: '> Rp 5.000.000',
+    status_ekonomi: 'mampu',
+    bansos_pkh: false,
+    bansos_bpnt: false,
+    bansos_blt_desa: false,
+    bpjs_pbi: false,
     dusun: 'Mekarsari',
     rw: '02',
     rt: '01',
     alamat_detail: 'Jl. Cempaka Indah No. 5',
+    status_tempat_tinggal: 'Milik Sendiri',
+    telepon: '0811-9999-0000',
+    status_domisili: 'Penduduk Tetap',
     status_kependudukan: 'aktif',
-    status_ekonomi: 'mampu',
+    is_disabilitas: false,
+    jenis_disabilitas: 'Tidak Ada',
+    penyakit_kronis: 'Tidak Ada',
+    status_kesehatan_khusus: 'Normal',
   },
   {
     id: 'w-5',
@@ -169,15 +361,36 @@ const INITIAL_DEMO_WARGA = [
     tempat_lahir: 'Bogor',
     tanggal_lahir: '1995-11-20',
     jenis_kelamin: 'Perempuan',
+    golongan_darah: 'O',
     agama: 'Islam',
-    pekerjaan: 'Pedagang',
+    no_akta_lahir: '3201-LT-20111995-005',
+    status_ktp: 'Sudah KTP-el',
     shdk: 'Kepala Keluarga',
+    status_perkawinan: 'Cerai Hidup',
+    no_akta_nikah_cerai: 'PA.Cbn/AC/2021/45',
+    nama_ayah: 'Sartika',
+    nama_ibu: 'Rokayah',
+    pendidikan_terakhir: 'SMA/SMK/Sederajat',
+    status_sekolah: 'Tidak / Sudah Lulus',
+    pekerjaan: 'Pedagang',
+    rentang_penghasilan: 'Rp 1.000.000 - Rp 2.500.000',
+    status_ekonomi: 'rentan',
+    bansos_pkh: false,
+    bansos_bpnt: true,
+    bansos_blt_desa: false,
+    bpjs_pbi: true,
     dusun: 'Mekarsari',
     rw: '02',
     rt: '02',
     alamat_detail: 'Kp. Pasir Honje RT 02',
+    status_tempat_tinggal: 'Sewa / Kontrak',
+    telepon: '0812-7777-6666',
+    status_domisili: 'Penduduk Tetap',
     status_kependudukan: 'aktif',
-    status_ekonomi: 'rentan',
+    is_disabilitas: false,
+    jenis_disabilitas: 'Tidak Ada',
+    penyakit_kronis: 'Tidak Ada',
+    status_kesehatan_khusus: 'Normal',
   },
 ];
 
@@ -744,109 +957,309 @@ export default function WargaPage() {
               </div>
             </div>
 
-            {/* Grid Detail Demografis Lengkap */}
-            <div className="space-y-3 text-xs">
-              {/* Bagian 1: Data Pribadi */}
-              <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-200/70 space-y-2">
-                <span className="text-[10.5px] font-bold text-teal-800 uppercase tracking-wider block">
-                  Biodata Kependudukan
-                </span>
+            {/* 5 KATEGORI DETAIL IDENTITAS LENGKAP & SINKRON */}
+            <div className="space-y-3.5 text-xs">
+              {/* KATEGORI 1: Identitas Dasar & Dokumen Kependudukan */}
+              <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
+                  <span className="text-[11px] font-black text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <User size={13} className="text-teal-600" />
+                    1. Identitas Dasar & Dokumen
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-100/80 text-teal-800 border border-teal-200">
+                    {selectedDetailWarga.status_ktp || 'Sudah KTP-el'}
+                  </span>
+                </div>
 
-                <div className="grid grid-cols-2 gap-2 text-slate-600">
+                <div className="grid grid-cols-2 gap-2.5 text-slate-600">
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Tempat, Tgl Lahir:</span>
-                    <strong className="text-slate-800 font-medium">
-                      {selectedDetailWarga.tempat_lahir || '-'},{' '}
-                      {formatDate(selectedDetailWarga.tanggal_lahir)}
+                    <span className="text-[10px] text-slate-400 block font-medium">Tempat, Tgl Lahir:</span>
+                    <strong className="text-slate-800 font-semibold block text-[11px]">
+                      {selectedDetailWarga.tempat_lahir || '-'}, {formatDate(selectedDetailWarga.tanggal_lahir)}
                     </strong>
                     {selectedDetailWarga.tanggal_lahir && (
-                      <span className="text-[10.5px] text-slate-500 block">
-                        ({calculateAge(selectedDetailWarga.tanggal_lahir)} tahun)
+                      <span className="text-[10px] text-teal-700 font-bold block mt-0.5">
+                        Usia: {calculateAge(selectedDetailWarga.tanggal_lahir)} tahun
                       </span>
                     )}
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Jenis Kelamin:</span>
-                    <strong className="text-slate-800 font-medium">
-                      {selectedDetailWarga.jenis_kelamin || '-'}
+                    <span className="text-[10px] text-slate-400 block font-medium">Jenis Kelamin & Gol. Darah:</span>
+                    <strong className="text-slate-800 font-semibold block text-[11px]">
+                      {selectedDetailWarga.jenis_kelamin || '-'} • Gol. {selectedDetailWarga.golongan_darah || '-'}
                     </strong>
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Agama:</span>
-                    <strong className="text-slate-800 font-medium">
+                    <span className="text-[10px] text-slate-400 block font-medium">Agama:</span>
+                    <strong className="text-slate-800 font-semibold block text-[11px]">
                       {selectedDetailWarga.agama || 'Islam'}
                     </strong>
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Pekerjaan:</span>
-                    <strong className="text-slate-800 font-medium">
-                      {selectedDetailWarga.pekerjaan || '-'}
+                    <span className="text-[10px] text-slate-400 block font-medium">No. Akta Kelahiran:</span>
+                    <strong className="text-slate-800 font-mono font-medium block text-[10.5px] truncate" title={selectedDetailWarga.no_akta_lahir || '-'}>
+                      {selectedDetailWarga.no_akta_lahir || '-'}
                     </strong>
                   </div>
                 </div>
               </div>
 
-              {/* Bagian 2: Domisili & Wilayah */}
-              <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-200/70 space-y-2">
-                <span className="text-[10.5px] font-bold text-teal-800 uppercase tracking-wider block">
-                  Alamat & Wilayah Domisili
+              {/* KATEGORI 2: Hubungan & Status Keluarga */}
+              <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <span className="text-[11px] font-black text-teal-800 uppercase tracking-wider block border-b border-slate-200/60 pb-1.5 flex items-center gap-1.5">
+                  <Users size={13} className="text-teal-600" />
+                  2. Hubungan & Status Keluarga
+                </span>
+
+                <div className="grid grid-cols-2 gap-2.5 text-slate-600">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Hubungan Keluarga (SHDK):</span>
+                    <strong className="text-slate-800 font-bold block text-[11px]">
+                      {selectedDetailWarga.shdk || 'Kepala Keluarga'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Status Perkawinan:</span>
+                    <strong className="text-slate-800 font-semibold block text-[11px]">
+                      {selectedDetailWarga.status_perkawinan || 'Belum Kawin'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Nama Ayah Kandung:</span>
+                    <strong className="text-slate-800 font-medium block text-[11px]">
+                      {selectedDetailWarga.nama_ayah || '-'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Nama Ibu Kandung:</span>
+                    <strong className="text-slate-800 font-medium block text-[11px]">
+                      {selectedDetailWarga.nama_ibu || '-'}
+                    </strong>
+                  </div>
+
+                  {selectedDetailWarga.no_akta_nikah && (
+                    <div className="col-span-2 pt-1 border-t border-slate-200/60">
+                      <span className="text-[10px] text-slate-400 block font-medium">No. Buku / Akta Nikah / Perceraian:</span>
+                      <strong className="text-slate-800 font-mono text-[10.5px]">
+                        {selectedDetailWarga.no_akta_nikah}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* KATEGORI 3: Pendidikan, Pekerjaan, & Ekonomi */}
+              <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <span className="text-[11px] font-black text-teal-800 uppercase tracking-wider block border-b border-slate-200/60 pb-1.5 flex items-center gap-1.5">
+                  <GraduationCap size={13} className="text-teal-600" />
+                  3. Pendidikan, Pekerjaan & Ekonomi
+                </span>
+
+                <div className="grid grid-cols-2 gap-2.5 text-slate-600">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Pendidikan Terakhir:</span>
+                    <strong className="text-slate-800 font-semibold block text-[11px]">
+                      {selectedDetailWarga.pendidikan || 'SMA/Sederajat'}
+                    </strong>
+                    <span className="text-[9.5px] text-slate-400 block mt-0.5">
+                      Status: {selectedDetailWarga.status_sekolah || 'Tidak Sekolah'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Pekerjaan Utama:</span>
+                    <strong className="text-slate-800 font-semibold block text-[11px]">
+                      {selectedDetailWarga.pekerjaan || '-'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Rentang Penghasilan:</span>
+                    <strong className="text-slate-800 font-medium block text-[11px]">
+                      {selectedDetailWarga.penghasilan || 'Rp 1.000.000 - Rp 2.500.000'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Tingkat Ekonomi:</span>
+                    <span className={`inline-block text-[10px] px-2 py-0.5 rounded-md font-bold uppercase mt-0.5 ${
+                      selectedDetailWarga.status_ekonomi === 'miskin'
+                        ? 'bg-rose-100 text-rose-800'
+                        : selectedDetailWarga.status_ekonomi === 'rentan'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {selectedDetailWarga.status_ekonomi || 'Mampu'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Status Bantuan Sosial */}
+                <div className="pt-2 border-t border-slate-200/60">
+                  <span className="text-[10px] text-slate-400 font-medium block mb-1.5">
+                    Kepesertaan Bantuan Sosial (Bansos):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
+                      selectedDetailWarga.bansos_pkh === 'Ya'
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : 'bg-slate-100 text-slate-400 border-slate-200'
+                    }`}>
+                      PKH: {selectedDetailWarga.bansos_pkh === 'Ya' ? 'Penerima' : 'Tidak'}
+                    </span>
+
+                    <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
+                      selectedDetailWarga.bansos_bpnt === 'Ya'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-slate-100 text-slate-400 border-slate-200'
+                    }`}>
+                      BPNT/Sembako: {selectedDetailWarga.bansos_bpnt === 'Ya' ? 'Penerima' : 'Tidak'}
+                    </span>
+
+                    <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
+                      selectedDetailWarga.bansos_blt === 'Ya'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-slate-100 text-slate-400 border-slate-200'
+                    }`}>
+                      BLT Desa: {selectedDetailWarga.bansos_blt === 'Ya' ? 'Penerima' : 'Tidak'}
+                    </span>
+
+                    <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
+                      selectedDetailWarga.bansos_bpjs_pbi === 'Ya'
+                        ? 'bg-teal-50 text-teal-700 border-teal-200'
+                        : 'bg-slate-100 text-slate-400 border-slate-200'
+                    }`}>
+                      BPJS PBI: {selectedDetailWarga.bansos_bpjs_pbi === 'Ya' ? 'Penerima' : 'Tidak'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* KATEGORI 4: Lokasi & Alamat Domisili */}
+              <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <span className="text-[11px] font-black text-teal-800 uppercase tracking-wider block border-b border-slate-200/60 pb-1.5 flex items-center gap-1.5">
+                  <Home size={13} className="text-teal-600" />
+                  4. Lokasi & Alamat Domisili
                 </span>
 
                 <div className="grid grid-cols-3 gap-2 text-slate-600">
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Dusun:</span>
-                    <strong className="text-slate-800 font-medium">
+                    <span className="text-[10px] text-slate-400 block font-medium">Dusun:</span>
+                    <strong className="text-slate-800 font-semibold block text-[11px]">
                       {selectedDetailWarga.dusun || '-'}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Rukun Warga (RW):</span>
-                    <strong className="text-slate-800 font-medium font-mono">
+                    <span className="text-[10px] text-slate-400 block font-medium">RW:</span>
+                    <strong className="text-slate-800 font-mono font-bold block text-[11px]">
                       RW {selectedDetailWarga.rw || '-'}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Rukun Tetangga (RT):</span>
-                    <strong className="text-slate-800 font-medium font-mono">
+                    <span className="text-[10px] text-slate-400 block font-medium">RT:</span>
+                    <strong className="text-slate-800 font-mono font-bold block text-[11px]">
                       RT {selectedDetailWarga.rt || '-'}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="pt-1.5 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-slate-600">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Status Tempat Tinggal:</span>
+                    <strong className="text-slate-800 font-medium block text-[11px]">
+                      {selectedDetailWarga.status_tempat_tinggal || 'Milik Sendiri'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Status Domisili:</span>
+                    <strong className="text-slate-800 font-medium block text-[11px]">
+                      {selectedDetailWarga.status_domisili || 'Penduduk Tetap'}
                     </strong>
                   </div>
                 </div>
 
                 {selectedDetailWarga.alamat_detail && (
                   <div className="pt-1 border-t border-slate-200/60">
-                    <span className="text-[10px] text-slate-400 block">Alamat Lengkap / Jalan:</span>
-                    <p className="text-slate-800 font-medium mt-0.5">
+                    <span className="text-[10px] text-slate-400 block font-medium">Alamat Lengkap / Jalan:</span>
+                    <p className="text-slate-800 font-medium text-[11px] mt-0.5">
                       {selectedDetailWarga.alamat_detail}
                     </p>
                   </div>
                 )}
+
+                {/* Nomor Telepon / WhatsApp */}
+                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Phone size={13} className="text-teal-700" />
+                    <div>
+                      <span className="text-[9.5px] text-slate-400 block font-medium">No. Telepon / WhatsApp:</span>
+                      <strong className="text-slate-800 font-mono text-[11px]">
+                        {selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp || '-'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {(selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp) && (
+                    <a
+                      href={`https://wa.me/${(selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp).replace(/^0/, '62').replace(/[^0-9]/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-sm transition-all"
+                    >
+                      <span>Chat WA</span>
+                      <ExternalLink size={11} />
+                    </a>
+                  )}
+                </div>
               </div>
 
-              {/* Bagian 3: Status Bansos & Kesejahteraan */}
-              <div className="p-2.5 rounded-2xl bg-teal-50/60 border border-teal-100 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] text-teal-700 font-bold block uppercase">
-                    Status Kesejahteraan / Bansos
-                  </span>
-                  <span className="capitalize font-bold text-slate-800 text-xs">
-                    Keluarga {selectedDetailWarga.status_ekonomi || 'Mampu'}
-                  </span>
-                </div>
-                <span
-                  className={`text-[9.5px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
-                    selectedDetailWarga.status_ekonomi === 'miskin'
-                      ? 'bg-rose-100 text-rose-800'
-                      : selectedDetailWarga.status_ekonomi === 'rentan'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-emerald-100 text-emerald-800'
-                  }`}
-                >
-                  {selectedDetailWarga.status_ekonomi || 'Mampu'}
+              {/* KATEGORI 5: Kondisi Khusus & Kerentanan */}
+              <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <span className="text-[11px] font-black text-teal-800 uppercase tracking-wider block border-b border-slate-200/60 pb-1.5 flex items-center gap-1.5">
+                  <HeartPulse size={13} className="text-teal-600" />
+                  5. Kondisi Khusus & Kerentanan
                 </span>
+
+                <div className="grid grid-cols-2 gap-2.5 text-slate-600">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Status Khusus / Posyandu:</span>
+                    <span className={`inline-block text-[10px] px-2 py-0.5 rounded-md font-bold mt-0.5 ${
+                      selectedDetailWarga.status_khusus === 'Balita (0-59 bulan)'
+                        ? 'bg-purple-100 text-purple-800'
+                        : selectedDetailWarga.status_khusus === 'Ibu Hamil'
+                        ? 'bg-pink-100 text-pink-800'
+                        : selectedDetailWarga.status_khusus === 'Ibu Menyusui'
+                        ? 'bg-rose-100 text-rose-800'
+                        : selectedDetailWarga.status_khusus === 'Lansia'
+                        ? 'bg-indigo-100 text-indigo-800'
+                        : 'bg-slate-200/80 text-slate-700'
+                    }`}>
+                      {selectedDetailWarga.status_khusus || 'Normal'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Penyandang Disabilitas:</span>
+                    <strong className="text-slate-800 font-semibold block text-[11px]">
+                      {selectedDetailWarga.disabilitas && selectedDetailWarga.disabilitas !== 'Tidak Ada'
+                        ? `Ya (${selectedDetailWarga.disabilitas})`
+                        : 'Tidak Ada'}
+                    </strong>
+                  </div>
+
+                  <div className="col-span-2 pt-1 border-t border-slate-200/60">
+                    <span className="text-[10px] text-slate-400 block font-medium">Penyakit Kronis / Menahun:</span>
+                    <strong className="text-slate-800 font-medium block text-[11px]">
+                      {selectedDetailWarga.penyakit_kronis || 'Tidak Ada'}
+                    </strong>
+                  </div>
+                </div>
               </div>
             </div>
 

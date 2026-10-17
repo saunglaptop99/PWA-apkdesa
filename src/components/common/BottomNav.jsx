@@ -1,18 +1,17 @@
 import React from 'react';
-import { Home, Users, Gift, User, FileSpreadsheet, Settings } from 'lucide-react';
+import { Home, Users, HeartPulse, User, Settings, Layers } from 'lucide-react';
 
 export default function BottomNav({ activeTab, setActiveTab, role }) {
   const tabs = [
-    { id: 'dashboard', label: 'Beranda', icon: Home },
-    { id: 'warga', label: 'Warga', icon: Users },
-    ...(role === 'admin'
-      ? [
-          { id: 'mutasi', label: 'Mutasi', icon: FileSpreadsheet },
-          { id: 'kelola', label: 'Kelola', icon: Settings },
-        ]
-      : []),
-    { id: 'bansos', label: 'Bansos', icon: Gift },
-    { id: 'profil', label: 'Akun', icon: User },
+    { id: 'dashboard', label: 'Beranda', icon: Home, match: ['dashboard'] },
+    { id: 'warga', label: 'Warga', icon: Users, match: ['warga'] },
+    { id: 'layanan', label: 'Layanan', icon: HeartPulse, match: ['layanan', 'bansos', 'mutasi'] },
+    {
+      id: 'profil',
+      label: role === 'admin' ? 'Akun & Kelola' : 'Akun',
+      icon: role === 'admin' ? Settings : User,
+      match: ['profil', 'kelola'],
+    },
   ];
 
   return (
@@ -20,7 +19,7 @@ export default function BottomNav({ activeTab, setActiveTab, role }) {
       <div className="max-w-md mx-auto flex justify-around items-center">
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+          const isActive = tab.match ? tab.match.includes(activeTab) : activeTab === tab.id;
           return (
             <button
               key={tab.id}

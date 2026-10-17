@@ -4,6 +4,7 @@ import { DesaProvider } from './context/DesaContext';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import WargaPage from './pages/WargaPage';
+import LayananPage from './pages/LayananPage';
 import BansosPage from './pages/BansosPage';
 import MutasiPage from './pages/MutasiPage';
 import AdminPanelPage from './pages/AdminPanelPage';
@@ -14,6 +15,12 @@ import { WifiOff, ShieldCheck } from 'lucide-react';
 function MainLayout() {
   const { user, profile, loading, isOnline } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [layananSubTab, setLayananSubTab] = useState('bansos');
+
+  const navigateToLayanan = (subTab = 'bansos') => {
+    setLayananSubTab(subTab);
+    setActiveTab('layanan');
+  };
 
   if (loading) {
     return (
@@ -46,14 +53,20 @@ function MainLayout() {
           </div>
         )}
 
-        {/* Tab Pages */}
+        {/* Tab Pages (Tersusun Rapi dalam 4 Pilar Layanan) */}
         <main className="flex-1 overflow-x-hidden">
-          {activeTab === 'dashboard' && <DashboardPage setActiveTab={setActiveTab} />}
+          {activeTab === 'dashboard' && (
+            <DashboardPage
+              setActiveTab={setActiveTab}
+              navigateToLayanan={navigateToLayanan}
+            />
+          )}
           {activeTab === 'warga' && <WargaPage />}
-          {activeTab === 'mutasi' && profile?.role === 'admin' && <MutasiPage />}
-          {activeTab === 'kelola' && profile?.role === 'admin' && <AdminPanelPage />}
-          {activeTab === 'bansos' && <BansosPage />}
-          {activeTab === 'profil' && <ProfilPage />}
+          {activeTab === 'layanan' && <LayananPage defaultSubTab={layananSubTab} />}
+          {activeTab === 'bansos' && <LayananPage defaultSubTab="bansos" />}
+          {activeTab === 'mutasi' && <LayananPage defaultSubTab="mutasi" />}
+          {activeTab === 'kelola' && <AdminPanelPage />}
+          {activeTab === 'profil' && <ProfilPage setActiveTab={setActiveTab} />}
         </main>
 
         {/* Shopee-style Bottom Navigation Bar */}

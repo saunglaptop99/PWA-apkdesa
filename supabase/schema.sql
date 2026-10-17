@@ -100,7 +100,7 @@ DO $$ BEGIN
     END IF;
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
--- 5. TABEL MASTER WARGA
+-- 5. TABEL MASTER WARGA (STANDAR SIAK & DUKCAPIL KEPENDUDUKAN DESA)
 CREATE TABLE IF NOT EXISTS public.warga (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nik VARCHAR(16) UNIQUE NOT NULL,
@@ -109,18 +109,71 @@ CREATE TABLE IF NOT EXISTS public.warga (
     tempat_lahir TEXT,
     tanggal_lahir DATE,
     jenis_kelamin VARCHAR(10) CHECK (jenis_kelamin IN ('Laki-laki', 'Perempuan')),
+    golongan_darah VARCHAR(5) DEFAULT 'O',
     agama TEXT DEFAULT 'Islam',
-    pekerjaan TEXT,
+    no_akta_lahir TEXT,
+    status_ktp TEXT DEFAULT 'Sudah KTP-el',
+    
+    -- Hubungan & Status Keluarga
     shdk TEXT DEFAULT 'Kepala Keluarga',
+    status_perkawinan TEXT DEFAULT 'Kawin',
+    no_akta_nikah_cerai TEXT,
+    nama_ayah TEXT,
+    nama_ibu TEXT,
+
+    -- Pendidikan, Pekerjaan & Ekonomi
+    pendidikan_terakhir TEXT DEFAULT 'SMA/SMK/Sederajat',
+    status_sekolah TEXT DEFAULT 'Tidak / Sudah Lulus',
+    pekerjaan TEXT,
+    rentang_penghasilan TEXT DEFAULT 'Rp 1.000.000 - Rp 2.500.000',
+    status_ekonomi ekonomi_warga DEFAULT 'mampu',
+    bansos_pkh BOOLEAN DEFAULT false,
+    bansos_bpnt BOOLEAN DEFAULT false,
+    bansos_blt_desa BOOLEAN DEFAULT false,
+    bpjs_pbi BOOLEAN DEFAULT false,
+
+    -- Lokasi & Alamat Domisili
     dusun TEXT NOT NULL,
     rw VARCHAR(4) NOT NULL,
     rt VARCHAR(4) NOT NULL,
     alamat_detail TEXT,
+    status_tempat_tinggal TEXT DEFAULT 'Milik Sendiri',
+    telepon TEXT,
+    status_domisili TEXT DEFAULT 'Penduduk Tetap',
     status_kependudukan status_warga DEFAULT 'aktif',
-    status_ekonomi ekonomi_warga DEFAULT 'mampu',
+
+    -- Kondisi Khusus & Kerentanan (Posyandu & Stunting)
+    is_disabilitas BOOLEAN DEFAULT false,
+    jenis_disabilitas TEXT DEFAULT 'Tidak Ada',
+    penyakit_kronis TEXT DEFAULT 'Tidak Ada',
+    status_kesehatan_khusus TEXT DEFAULT 'Normal',
+
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Pastikan kolom baru terpasang di database Supabase yang sudah aktif (Backward Compatibility)
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS golongan_darah VARCHAR(5) DEFAULT 'O';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS no_akta_lahir TEXT;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS status_ktp TEXT DEFAULT 'Sudah KTP-el';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS status_perkawinan TEXT DEFAULT 'Kawin';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS no_akta_nikah_cerai TEXT;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS nama_ayah TEXT;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS nama_ibu TEXT;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS pendidikan_terakhir TEXT DEFAULT 'SMA/SMK/Sederajat';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS status_sekolah TEXT DEFAULT 'Tidak / Sudah Lulus';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS rentang_penghasilan TEXT DEFAULT 'Rp 1.000.000 - Rp 2.500.000';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS bansos_pkh BOOLEAN DEFAULT false;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS bansos_bpnt BOOLEAN DEFAULT false;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS bansos_blt_desa BOOLEAN DEFAULT false;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS bpjs_pbi BOOLEAN DEFAULT false;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS status_tempat_tinggal TEXT DEFAULT 'Milik Sendiri';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS telepon TEXT;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS status_domisili TEXT DEFAULT 'Penduduk Tetap';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS is_disabilitas BOOLEAN DEFAULT false;
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS jenis_disabilitas TEXT DEFAULT 'Tidak Ada';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS penyakit_kronis TEXT DEFAULT 'Tidak Ada';
+ALTER TABLE public.warga ADD COLUMN IF NOT EXISTS status_kesehatan_khusus TEXT DEFAULT 'Normal';
 
 -- 6. TABEL MUTASI KEPENDUDUKAN (Kelahiran, Kematian, Pindah)
 CREATE TABLE IF NOT EXISTS public.mutasi_kependudukan (

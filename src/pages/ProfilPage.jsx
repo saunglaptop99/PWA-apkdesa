@@ -13,9 +13,11 @@ import {
   UserCheck,
   Building2,
   KeyRound,
+  ChevronRight,
+  Settings,
 } from 'lucide-react';
 
-export default function ProfilPage() {
+export default function ProfilPage({ setActiveTab }) {
   const { profile, logout, isOnline, aparatList, loginDemo } = useAuth();
   const { pengaturanDesa } = useDesa();
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
@@ -102,6 +104,31 @@ export default function ProfilPage() {
           </div>
         </div>
       </div>
+
+      {/* Khusus Admin: Akses Panel Kelola Desa & Wilayah */}
+      {profile?.role === 'admin' && (
+        <div className="bg-gradient-to-r from-teal-800 to-slate-900 rounded-3xl p-4 text-white shadow-lg shadow-teal-950/20 mb-4 animate-fade-in">
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-2xl bg-white/10 text-emerald-300">
+                <Settings size={20} />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm">Kelola Desa & Hak Akses</h4>
+                <p className="text-[11px] text-teal-200">Aparat, PIN, Master Dusun/RW/RT, & Profil Desa</p>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab && setActiveTab('kelola')}
+            className="w-full py-2.5 px-4 bg-teal-500 hover:bg-teal-400 active:scale-[0.98] text-slate-950 font-black rounded-2xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md"
+          >
+            <span>Buka Panel Manajemen Desa</span>
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      )}
 
       {/* Role Switcher for Fast Multi-Role Testing */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm mb-4">
