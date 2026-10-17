@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { X, UserPlus, Save, AlertCircle, Check } from 'lucide-react';
+import { useDesa } from '../../context/DesaContext';
+import { X, UserPlus, Save, AlertCircle, MapPin, Plus } from 'lucide-react';
 
 export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
   const isEdit = Boolean(wargaToEdit);
+  const { getDusunOptions, getRwOptions, getRtOptions } = useDesa();
 
   const [form, setForm] = useState({
     nik: wargaToEdit?.nik || '',
@@ -15,9 +17,9 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
     agama: wargaToEdit?.agama || 'Islam',
     pekerjaan: wargaToEdit?.pekerjaan || '',
     shdk: wargaToEdit?.shdk || 'Kepala Keluarga',
-    dusun: wargaToEdit?.dusun || 'Sukamaju',
-    rw: wargaToEdit?.rw || '01',
-    rt: wargaToEdit?.rt || '01',
+    dusun: wargaToEdit?.dusun || getDusunOptions()[0] || 'Sukamaju',
+    rw: wargaToEdit?.rw ? String(wargaToEdit.rw).padStart(2, '0') : '01',
+    rt: wargaToEdit?.rt ? String(wargaToEdit.rt).padStart(2, '0') : '01',
     alamat_detail: wargaToEdit?.alamat_detail || '',
     status_ekonomi: wargaToEdit?.status_ekonomi || 'mampu',
     status_kependudukan: wargaToEdit?.status_kependudukan || 'aktif',
@@ -25,10 +27,46 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [customWilayah, setCustomWilayah] = useState(false);
+
+  const dusunOptions = getDusunOptions();
+  const rwOptions = getRwOptions(form.dusun);
+  const rtOptions = getRtOptions(form.dusun, form.rw);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleDusunChange = (e) => {
+    const newDusun = e.target.value;
+    if (newDusun === '__custom__') {
+      setCustomWilayah(true);
+      return;
+    }
+    const availableRws = getRwOptions(newDusun);
+    const newRw = availableRws[0] || '01';
+    const availableRts = getRtOptions(newDusun, newRw);
+    const newRt = availableRts[0] || '01';
+
+    setForm((prev) => ({
+      ...prev,
+      dusun: newDusun,
+      rw: newRw,
+      rt: newRt,
+    }));
+  };
+
+  const handleRwChange = (e) => {
+    const newRw = e.target.value;
+    const availableRts = getRtOptions(form.dusun, newRw);
+    const newRt = availableRts[0] || '01';
+
+    setForm((prev) => ({
+      ...prev,
+      rw: newRw,
+      rt: newRt,
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -50,32 +88,42 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
 
     setLoading(true);
 
+    const payload = {
+      ...form,
+      rt: String(form.rt).padStart(2, '0'),
+      rw: String(form.rw).padStart(2, '0'),
+      updated_at: new Date().toISOString(),
+    };
+
     try {
       if (isEdit) {
         const { error } = await supabase
           .from('warga')
-          .update({ ...form, updated_at: new Date().toISOString() })
+          .update(payload)
           .eq('id', wargaToEdit.id);
 
         if (error) {
-          // If offline or table error, update local cache
-          const localList = JSON.parse(localStorage.getItem('cached_warga_local') || '[]');
+          console.warn('DB update note:', error.message);
+          // Fallback lokal
+          const localList = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
           const idx = localList.findIndex((w) => w.id === wargaToEdit.id || w.nik === form.nik);
           if (idx >= 0) {
-            localList[idx] = { ...localList[idx], ...form };
-            localStorage.setItem('cached_warga_local', JSON.stringify(localList));
+            localList[idx] = { ...localList[idx], ...payload };
+            localStorage.setItem('cached_warga_desa', JSON.stringify(localList));
           }
         }
       } else {
-        const { error } = await supabase.from('warga').insert([form]);
+        const { error } = await supabase.from('warga').insert([payload]);
         if (error) {
-          // If offline or table error, save to local cache
-          const localList = JSON.parse(localStorage.getItem('cached_warga_local') || '[]');
-          localList.unshift({ id: 'local-' + Date.now(), ...form });
-          localStorage.setItem('cached_warga_local', JSON.stringify(localList));
+          console.warn('DB insert note:', error.message);
+          const localList = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
+          localList.unshift({ id: 'w-' + Date.now(), ...payload });
+          localStorage.setItem('cached_warga_desa', JSON.stringify(localList));
         }
       }
 
+      // Beritahu seluruh tab / role via broadcast
+      window.dispatchEvent(new Event('warga-updated'));
       onSuccess();
       onClose();
     } catch (err) {
@@ -218,45 +266,111 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">Dusun</label>
-              <input
-                type="text"
-                name="dusun"
-                value={form.dusun}
-                onChange={handleChange}
-                required
-                placeholder="Sukamaju"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none"
-              />
+          {/* PILIHAN WILAYAH DUSUN, RW, RT (DROPDOWN DARI DATABASE) */}
+          <div className="p-3 bg-teal-50/70 rounded-2xl border border-teal-100/90 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[11px] font-bold text-teal-800 flex items-center gap-1">
+                <MapPin size={13} className="text-teal-600" />
+                <span>Pilih Wilayah Domisili (Dropdown Database)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setCustomWilayah(!customWilayah)}
+                className="text-[10px] text-teal-700 hover:text-teal-900 font-semibold"
+              >
+                {customWilayah ? 'Pilih dari List Dropdown' : '+ Input Manual / Dusun Baru'}
+              </button>
             </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">RW</label>
-              <input
-                type="text"
-                name="rw"
-                maxLength={2}
-                value={form.rw}
-                onChange={handleChange}
-                required
-                placeholder="01"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">RT</label>
-              <input
-                type="text"
-                name="rt"
-                maxLength={2}
-                value={form.rt}
-                onChange={handleChange}
-                required
-                placeholder="01"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none"
-              />
-            </div>
+
+            {!customWilayah ? (
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10.5px] font-bold text-slate-700 mb-1">Dusun *</label>
+                  <select
+                    name="dusun"
+                    value={form.dusun}
+                    onChange={handleDusunChange}
+                    className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-teal-600 outline-none"
+                  >
+                    {dusunOptions.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10.5px] font-bold text-slate-700 mb-1">RW *</label>
+                  <select
+                    name="rw"
+                    value={String(form.rw).padStart(2, '0')}
+                    onChange={handleRwChange}
+                    className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-bold text-center text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
+                  >
+                    {rwOptions.map((r) => (
+                      <option key={r} value={r}>
+                        RW {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10.5px] font-bold text-slate-700 mb-1">RT *</label>
+                  <select
+                    name="rt"
+                    value={String(form.rt).padStart(2, '0')}
+                    onChange={handleChange}
+                    className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-bold text-center text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
+                  >
+                    {rtOptions.map((t) => (
+                      <option key={t} value={t}>
+                        RT {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 animate-fade-in">
+                <div>
+                  <label className="block text-[10.5px] font-bold text-slate-700 mb-1">Nama Dusun</label>
+                  <input
+                    type="text"
+                    name="dusun"
+                    value={form.dusun}
+                    onChange={handleChange}
+                    placeholder="Sukamaju"
+                    className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white focus:ring-2 focus:ring-teal-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10.5px] font-bold text-slate-700 mb-1">No. RW</label>
+                  <input
+                    type="text"
+                    name="rw"
+                    maxLength={2}
+                    value={form.rw}
+                    onChange={handleChange}
+                    placeholder="01"
+                    className="w-full p-2 rounded-xl border border-slate-200 text-xs text-center bg-white focus:ring-2 focus:ring-teal-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10.5px] font-bold text-slate-700 mb-1">No. RT</label>
+                  <input
+                    type="text"
+                    name="rt"
+                    maxLength={2}
+                    value={form.rt}
+                    onChange={handleChange}
+                    placeholder="01"
+                    className="w-full p-2 rounded-xl border border-slate-200 text-xs text-center bg-white focus:ring-2 focus:ring-teal-600 outline-none"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -289,7 +403,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">Alamat Detail / Jalan</label>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Alamat Detail / Nama Jalan</label>
             <input
               type="text"
               name="alamat_detail"

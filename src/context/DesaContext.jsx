@@ -12,14 +12,36 @@ const DEFAULT_PENGATURAN = {
   kontak_desa: '0812-3456-7890',
 };
 
+// Default Master Wilayah Dusun, RW, RT
+export const DEFAULT_WILAYAH_DESA = [
+  { dusun: 'Sukamaju', rw: '01', rt: '01' },
+  { dusun: 'Sukamaju', rw: '01', rt: '02' },
+  { dusun: 'Sukamaju', rw: '01', rt: '03' },
+  { dusun: 'Sukamaju', rw: '01', rt: '04' },
+  { dusun: 'Sukamaju', rw: '02', rt: '01' },
+  { dusun: 'Sukamaju', rw: '02', rt: '02' },
+  { dusun: 'Sukamaju', rw: '02', rt: '03' },
+  { dusun: 'Mekarsari', rw: '01', rt: '01' },
+  { dusun: 'Mekarsari', rw: '01', rt: '02' },
+  { dusun: 'Mekarsari', rw: '02', rt: '01' },
+  { dusun: 'Mekarsari', rw: '02', rt: '02' },
+  { dusun: 'Mekarsari', rw: '02', rt: '03' },
+];
+
 export const DesaProvider = ({ children }) => {
   const [pengaturanDesa, setPengaturanDesa] = useState(() => {
     const cached = localStorage.getItem('cached_pengaturan_desa');
     return cached ? JSON.parse(cached) : DEFAULT_PENGATURAN;
   });
+
+  const [wilayahList, setWilayahList] = useState(() => {
+    const cached = localStorage.getItem('cached_wilayah_desa');
+    return cached ? JSON.parse(cached) : DEFAULT_WILAYAH_DESA;
+  });
+
   const [loading, setLoading] = useState(false);
 
-  // Fetch from Supabase
+  // Fetch Pengaturan Desa dari Supabase
   const fetchPengaturan = async () => {
     try {
       const { data, error } = await supabase
@@ -33,16 +55,71 @@ export const DesaProvider = ({ children }) => {
         localStorage.setItem('cached_pengaturan_desa', JSON.stringify(data));
       }
     } catch (err) {
-      console.warn('Gagal memuat pengaturan desa dari server, menggunakan cache:', err);
+      console.warn('Gagal memuat pengaturan desa dari server:', err);
+    }
+  };
+
+  // Fetch Master Wilayah Desa dari Supabase
+  const fetchWilayah = async () => {
+    try {
+      // 1. Ambil dari tabel wilayah_desa
+      const { data: wData, error: wErr } = await supabase
+        .from('wilayah_desa')
+        .select('dusun, rw, rt')
+        .order('dusun')
+        .order('rw')
+        .order('rt');
+
+      // 2. Ambil juga dari data warga yang ada di database agar sinkron 100%
+      const { data: wargaData } = await supabase
+        .from('warga')
+        .select('dusun, rw, rt');
+
+      const combined = [...DEFAULT_WILAYAH_DESA];
+
+      if (!wErr && wData && wData.length > 0) {
+        combined.push(...wData);
+      }
+      if (wargaData && wargaData.length > 0) {
+        wargaData.forEach((w) => {
+          if (w.dusun && w.rw && w.rt) {
+            combined.push({
+              dusun: w.dusun.trim(),
+              rw: String(w.rw).padStart(2, '0'),
+              rt: String(w.rt).padStart(2, '0'),
+            });
+          }
+        });
+      }
+
+      // Hapus duplikasi berdasarkan kombinasi dusun-rw-rt
+      const uniqueMap = new Map();
+      combined.forEach((item) => {
+        const key = `${item.dusun.toLowerCase()}-${String(item.rw).padStart(2, '0')}-${String(item.rt).padStart(2, '0')}`;
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, {
+            dusun: item.dusun,
+            rw: String(item.rw).padStart(2, '0'),
+            rt: String(item.rt).padStart(2, '0'),
+          });
+        }
+      });
+
+      const uniqueList = Array.from(uniqueMap.values());
+      setWilayahList(uniqueList);
+      localStorage.setItem('cached_wilayah_desa', JSON.stringify(uniqueList));
+    } catch (err) {
+      console.warn('Gagal fetch master wilayah:', err);
     }
   };
 
   useEffect(() => {
     fetchPengaturan();
+    fetchWilayah();
 
-    // Setup Supabase Realtime Listener untuk sinkronisasi otomatis nama desa/kades
+    // Supabase Realtime Listener untuk sinkronisasi otomatis nama desa/kades
     const channel = supabase
-      .channel('realtime-pengaturan-desa')
+      .channel('realtime-desa-context')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'pengaturan_desa' },
@@ -53,9 +130,22 @@ export const DesaProvider = ({ children }) => {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'wilayah_desa' },
+        () => {
+          fetchWilayah();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'warga' },
+        () => {
+          fetchWilayah();
+        }
+      )
       .subscribe();
 
-    // Local broadcast listener untuk multi-tab instant sync
     const handleLocalSync = (e) => {
       if (e.detail) {
         setPengaturanDesa(e.detail);
@@ -63,9 +153,13 @@ export const DesaProvider = ({ children }) => {
     };
     window.addEventListener('pengaturan-desa-updated', handleLocalSync);
 
+    const handleWilayahLocalSync = () => fetchWilayah();
+    window.addEventListener('warga-updated', handleWilayahLocalSync);
+
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('pengaturan-desa-updated', handleLocalSync);
+      window.removeEventListener('warga-updated', handleWilayahLocalSync);
     };
   }, []);
 
@@ -78,27 +172,54 @@ export const DesaProvider = ({ children }) => {
       updated_at: new Date().toISOString(),
     };
 
-    // Update state & cache seketika
     setPengaturanDesa(updated);
     localStorage.setItem('cached_pengaturan_desa', JSON.stringify(updated));
-
-    // Broadcast lokal
     window.dispatchEvent(new CustomEvent('pengaturan-desa-updated', { detail: updated }));
 
     try {
-      // Upsert ke Supabase
-      const { error } = await supabase
-        .from('pengaturan_desa')
-        .upsert(updated, { onConflict: 'id' });
-
-      if (error) {
-        console.warn('Catatan DB (offline/belum migrasi):', error.message);
-      }
+      await supabase.from('pengaturan_desa').upsert(updated, { onConflict: 'id' });
     } catch (err) {
-      console.warn('Gagal sync ke server Supabase:', err);
+      console.warn('Gagal update pengaturan desa:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper fungsi untuk dropdown Dusun, RW, dan RT
+  const getDusunOptions = () => {
+    const list = Array.from(new Set(wilayahList.map((w) => w.dusun))).filter(Boolean);
+    return list.length > 0 ? list : ['Sukamaju', 'Mekarsari'];
+  };
+
+  const getRwOptions = (selectedDusun) => {
+    let filtered = wilayahList;
+    if (selectedDusun) {
+      filtered = wilayahList.filter(
+        (w) => w.dusun.toLowerCase() === selectedDusun.toLowerCase()
+      );
+    }
+    const rws = Array.from(new Set(filtered.map((w) => String(w.rw).padStart(2, '0'))))
+      .filter(Boolean)
+      .sort();
+    return rws.length > 0 ? rws : ['01', '02', '03', '04', '05'];
+  };
+
+  const getRtOptions = (selectedDusun, selectedRw) => {
+    let filtered = wilayahList;
+    if (selectedDusun) {
+      filtered = filtered.filter(
+        (w) => w.dusun.toLowerCase() === selectedDusun.toLowerCase()
+      );
+    }
+    if (selectedRw) {
+      filtered = filtered.filter(
+        (w) => String(w.rw).padStart(2, '0') === String(selectedRw).padStart(2, '0')
+      );
+    }
+    const rts = Array.from(new Set(filtered.map((w) => String(w.rt).padStart(2, '0'))))
+      .filter(Boolean)
+      .sort();
+    return rts.length > 0 ? rts : ['01', '02', '03', '04', '05', '06', '07', '08'];
   };
 
   return (
@@ -107,6 +228,11 @@ export const DesaProvider = ({ children }) => {
         pengaturanDesa,
         updatePengaturanDesa,
         fetchPengaturan,
+        wilayahList,
+        getDusunOptions,
+        getRwOptions,
+        getRtOptions,
+        fetchWilayah,
         loading,
       }}
     >

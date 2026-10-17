@@ -39,7 +39,33 @@ ON CONFLICT (id) DO UPDATE SET
     nama_kepala_desa = EXCLUDED.nama_kepala_desa,
     updated_at = NOW();
 
--- 3. TABEL PROFIL PENGGUNA & APARAT DESA (Mendukung Login PIN Cepat)
+-- 3. TABEL MASTER WILAYAH DESA (Dusun, RW, RT untuk Dropdown Otomatis)
+CREATE TABLE IF NOT EXISTS public.wilayah_desa (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dusun TEXT NOT NULL,
+    rw VARCHAR(4) NOT NULL,
+    rt VARCHAR(4) NOT NULL,
+    keterangan TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(dusun, rw, rt)
+);
+
+INSERT INTO public.wilayah_desa (dusun, rw, rt) VALUES
+('Sukamaju', '01', '01'),
+('Sukamaju', '01', '02'),
+('Sukamaju', '01', '03'),
+('Sukamaju', '01', '04'),
+('Sukamaju', '02', '01'),
+('Sukamaju', '02', '02'),
+('Sukamaju', '02', '03'),
+('Mekarsari', '01', '01'),
+('Mekarsari', '01', '02'),
+('Mekarsari', '02', '01'),
+('Mekarsari', '02', '02'),
+('Mekarsari', '02', '03')
+ON CONFLICT (dusun, rw, rt) DO NOTHING;
+
+-- 4. TABEL PROFIL PENGGUNA & APARAT DESA (Mendukung Login PIN Cepat)
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID,
@@ -74,7 +100,7 @@ DO $$ BEGIN
     END IF;
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
--- 4. TABEL MASTER WARGA
+-- 5. TABEL MASTER WARGA
 CREATE TABLE IF NOT EXISTS public.warga (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nik VARCHAR(16) UNIQUE NOT NULL,
@@ -96,7 +122,7 @@ CREATE TABLE IF NOT EXISTS public.warga (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. TABEL MUTASI KEPENDUDUKAN (Kelahiran, Kematian, Pindah)
+-- 6. TABEL MUTASI KEPENDUDUKAN (Kelahiran, Kematian, Pindah)
 CREATE TABLE IF NOT EXISTS public.mutasi_kependudukan (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     warga_id UUID REFERENCES public.warga(id) ON DELETE CASCADE,
@@ -107,7 +133,7 @@ CREATE TABLE IF NOT EXISTS public.mutasi_kependudukan (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. TABEL BANTUAN SOSIAL (BANSOS)
+-- 7. TABEL BANTUAN SOSIAL (BANSOS)
 CREATE TABLE IF NOT EXISTS public.bantuan_sosial (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nama_program TEXT NOT NULL,
@@ -116,7 +142,7 @@ CREATE TABLE IF NOT EXISTS public.bantuan_sosial (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. TABEL PENERIMA BANSOS
+-- 8. TABEL PENERIMA BANSOS
 CREATE TABLE IF NOT EXISTS public.penerima_bansos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bansos_id UUID REFERENCES public.bantuan_sosial(id) ON DELETE CASCADE,
@@ -127,15 +153,16 @@ CREATE TABLE IF NOT EXISTS public.penerima_bansos (
     UNIQUE(bansos_id, warga_id)
 );
 
--- 8. AKTIFKAN ROW LEVEL SECURITY (RLS)
+-- 9. AKTIFKAN ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.pengaturan_desa ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.wilayah_desa ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.warga ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mutasi_kependudukan ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bantuan_sosial ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.penerima_bansos ENABLE ROW LEVEL SECURITY;
 
--- 9. HELPER FUNCTION UNTUK MENDAPATKAN PROFIL PENGGUNA AKTIF
+-- 10. HELPER FUNCTION UNTUK MENDAPATKAN PROFIL PENGGUNA AKTIF
 CREATE OR REPLACE FUNCTION get_my_profile()
 RETURNS TABLE (role user_role, dusun TEXT, rw TEXT, rt TEXT) AS $$
     SELECT role, wilayah_dusun, wilayah_rw, wilayah_rt 
@@ -143,7 +170,7 @@ RETURNS TABLE (role user_role, dusun TEXT, rw TEXT, rt TEXT) AS $$
     WHERE id = auth.uid() OR user_id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER;
 
--- 10. RLS POLICIES
+-- 11. RLS POLICIES (BEBAS REKURSIF UNTUK KEANDALAN REALTIME)
 
 -- Pengaturan Desa
 DROP POLICY IF EXISTS "Semua Orang Melihat Pengaturan Desa" ON public.pengaturan_desa;
@@ -154,51 +181,50 @@ DROP POLICY IF EXISTS "Admin Mengelola Pengaturan Desa" ON public.pengaturan_des
 CREATE POLICY "Admin Mengelola Pengaturan Desa" ON public.pengaturan_desa
 FOR ALL USING (true);
 
--- Profiles
-DROP POLICY IF EXISTS "Semua Aparat Melihat Profil" ON public.profiles;
-CREATE POLICY "Semua Aparat Melihat Profil" ON public.profiles
+-- Wilayah Desa
+DROP POLICY IF EXISTS "Semua Melihat Wilayah Desa" ON public.wilayah_desa;
+CREATE POLICY "Semua Melihat Wilayah Desa" ON public.wilayah_desa
 FOR SELECT USING (true);
 
-DROP POLICY IF EXISTS "Admin Mengelola Semua Profil Aparat" ON public.profiles;
-CREATE POLICY "Admin Mengelola Semua Profil Aparat" ON public.profiles
+DROP POLICY IF EXISTS "Admin Mengelola Wilayah Desa" ON public.wilayah_desa;
+CREATE POLICY "Admin Mengelola Wilayah Desa" ON public.wilayah_desa
 FOR ALL USING (true);
+
+-- Profiles (Hapus policy lama agar tidak terjadi infinite recursion)
+DROP POLICY IF EXISTS "Pengguna dapat membaca profil sendiri atau admin" ON public.profiles;
+DROP POLICY IF EXISTS "Admin dapat mengelola semua profil" ON public.profiles;
+DROP POLICY IF EXISTS "Semua Aparat Melihat Profil" ON public.profiles;
+DROP POLICY IF EXISTS "Admin Mengelola Semua Profil Aparat" ON public.profiles;
+DROP POLICY IF EXISTS "Akses Profil Publik" ON public.profiles;
+DROP POLICY IF EXISTS "Akses Profil Kelola" ON public.profiles;
+
+CREATE POLICY "Akses Profil Publik" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Akses Profil Kelola" ON public.profiles FOR ALL USING (true);
 
 -- Warga
 DROP POLICY IF EXISTS "Akses Warga Sesuai Hirarki Role" ON public.warga;
-CREATE POLICY "Akses Warga Sesuai Hirarki Role" ON public.warga
-FOR SELECT USING (true);
-
 DROP POLICY IF EXISTS "Admin Mengelola Data Warga" ON public.warga;
-CREATE POLICY "Admin Mengelola Data Warga" ON public.warga
-FOR ALL USING (true);
+DROP POLICY IF EXISTS "Akses Warga Seluruhnya" ON public.warga;
+
+CREATE POLICY "Akses Warga Seluruhnya" ON public.warga FOR ALL USING (true);
 
 -- Mutasi
 DROP POLICY IF EXISTS "Akses Mutasi Sesuai Kewenangan" ON public.mutasi_kependudukan;
-CREATE POLICY "Akses Mutasi Sesuai Kewenangan" ON public.mutasi_kependudukan
-FOR SELECT USING (true);
-
 DROP POLICY IF EXISTS "Admin Mengelola Mutasi" ON public.mutasi_kependudukan;
-CREATE POLICY "Admin Mengelola Mutasi" ON public.mutasi_kependudukan
-FOR ALL USING (true);
+DROP POLICY IF EXISTS "Akses Mutasi Seluruhnya" ON public.mutasi_kependudukan;
+
+CREATE POLICY "Akses Mutasi Seluruhnya" ON public.mutasi_kependudukan FOR ALL USING (true);
 
 -- Bantuan Sosial & Penerima
 DROP POLICY IF EXISTS "Semua Aparat Melihat Program Bansos" ON public.bantuan_sosial;
-CREATE POLICY "Semua Aparat Melihat Program Bansos" ON public.bantuan_sosial
-FOR SELECT USING (true);
-
 DROP POLICY IF EXISTS "Admin Mengelola Program Bansos" ON public.bantuan_sosial;
-CREATE POLICY "Admin Mengelola Program Bansos" ON public.bantuan_sosial
-FOR ALL USING (true);
+CREATE POLICY "Admin Mengelola Program Bansos" ON public.bantuan_sosial FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Semua Aparat Melihat Penerima Bansos" ON public.penerima_bansos;
-CREATE POLICY "Semua Aparat Melihat Penerima Bansos" ON public.penerima_bansos
-FOR SELECT USING (true);
-
 DROP POLICY IF EXISTS "Admin Mengelola Penerima Bansos" ON public.penerima_bansos;
-CREATE POLICY "Admin Mengelola Penerima Bansos" ON public.penerima_bansos
-FOR ALL USING (true);
+CREATE POLICY "Admin Mengelola Penerima Bansos" ON public.penerima_bansos FOR ALL USING (true);
 
--- 11. TRIGGER OTOMATISASI STATUS MUTASI WARGA
+-- 12. TRIGGER OTOMATISASI STATUS MUTASI WARGA
 CREATE OR REPLACE FUNCTION update_status_warga_on_mutasi()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -218,7 +244,7 @@ CREATE TRIGGER trg_mutasi_status_warga
 AFTER INSERT OR UPDATE ON public.mutasi_kependudukan
 FOR EACH ROW EXECUTE FUNCTION update_status_warga_on_mutasi();
 
--- 12. AKTIFKAN REPLIKASI REALTIME SUPABASE (SINKRONISASI OTOMATIS SEMUA ROLE)
+-- 13. AKTIFKAN REPLIKASI REALTIME SUPABASE (SINKRONISASI OTOMATIS SEMUA ROLE)
 DO $$ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.warga;
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
@@ -229,6 +255,10 @@ EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 DO $$ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.pengaturan_desa;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.wilayah_desa;
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 DO $$ BEGIN
@@ -243,7 +273,7 @@ DO $$ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.penerima_bansos;
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
--- 13. SEED DATA DEFAULT APARAT DESA (LOGIN PIN DEFAULT: 123456)
+-- 14. SEED DATA DEFAULT APARAT DESA (LOGIN PIN DEFAULT: 123456)
 INSERT INTO public.profiles (username, pin, nama_lengkap, role, jabatan, wilayah_dusun, wilayah_rw, wilayah_rt, telepon)
 VALUES
 ('admin', '123456', 'Bpk. Suryanto, S.Sos', 'admin', 'Sekretaris Desa / Admin', NULL, NULL, NULL, '081234567800'),
@@ -259,7 +289,7 @@ ON CONFLICT (username) DO UPDATE SET
     wilayah_rw = EXCLUDED.wilayah_rw,
     wilayah_rt = EXCLUDED.wilayah_rt;
 
--- 14. DATA WARGA AWAL (DENGAN CONTOH RT 01/01 DAN RT 02/01)
+-- 15. DATA WARGA AWAL (DENGAN CONTOH RT 01/01 DAN RT 02/01)
 INSERT INTO public.warga (nik, no_kk, nama, tempat_lahir, tanggal_lahir, jenis_kelamin, agama, pekerjaan, shdk, dusun, rw, rt, alamat_detail, status_kependudukan, status_ekonomi) VALUES
 -- RT 01 / RW 01
 ('3201011203850001', '3201011203850000', 'Bambang Sudarmono', 'Bandung', '1985-03-12', 'Laki-laki', 'Islam', 'Petani', 'Kepala Keluarga', 'Sukamaju', '01', '01', 'Jl. Melati No. 12 RT 01', 'aktif', 'miskin'),
