@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useDesa } from '../context/DesaContext';
+import { normalizeWilayah } from './WargaPage';
 import {
   Users,
   AlertTriangle,
@@ -11,12 +13,15 @@ import {
   MapPin,
   Calendar,
   Sparkles,
-  ArrowRight,
+  Settings,
   Bell,
+  Building2,
 } from 'lucide-react';
 
 export default function DashboardPage({ setActiveTab }) {
   const { profile, isOnline } = useAuth();
+  const { pengaturanDesa } = useDesa();
+
   const [stats, setStats] = useState({
     totalWarga: 0,
     wargaMiskin: 0,
@@ -26,65 +31,101 @@ export default function DashboardPage({ setActiveTab }) {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadStats() {
-      setLoading(true);
-      try {
-        let wargaQuery = supabase.from('warga').select('*').eq('status_kependudukan', 'aktif');
+  const loadStats = async () => {
+    setLoading(true);
+    try {
+      let wargaQuery = supabase.from('warga').select('*').eq('status_kependudukan', 'aktif');
 
-        // Apply territory constraint
-        if (profile?.role === 'rt') {
-          if (profile.wilayah_rt) wargaQuery = wargaQuery.eq('rt', profile.wilayah_rt);
-          if (profile.wilayah_rw) wargaQuery = wargaQuery.eq('rw', profile.wilayah_rw);
-        } else if (profile?.role === 'rw') {
-          if (profile.wilayah_rw) wargaQuery = wargaQuery.eq('rw', profile.wilayah_rw);
-        } else if (profile?.role === 'dusun') {
-          if (profile.wilayah_dusun) wargaQuery = wargaQuery.eq('dusun', profile.wilayah_dusun);
-        }
-
-        const { data: wargaData } = await wargaQuery;
-
-        if (wargaData && wargaData.length > 0) {
-          const total = wargaData.length;
-          const miskin = wargaData.filter((w) => w.status_ekonomi === 'miskin').length;
-          const rentan = wargaData.filter((w) => w.status_ekonomi === 'rentan').length;
-          const uniqueKK = new Set(wargaData.map((w) => w.no_kk)).size;
-
-          const { count: bansosCount } = await supabase
-            .from('penerima_bansos')
-            .select('*', { count: 'exact', head: true });
-
-          setStats({
-            totalWarga: total,
-            wargaMiskin: miskin,
-            wargaRentan: rentan,
-            penerimaBansos: bansosCount || 2,
-            totalKK: uniqueKK,
-          });
-        } else {
-          // Fallback to local cached stats
-          const cached = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
-          const total = cached.length || 6;
-          const miskin = cached.filter((w) => w.status_ekonomi === 'miskin').length || 3;
-          const rentan = cached.filter((w) => w.status_ekonomi === 'rentan').length || 2;
-          const uniqueKK = new Set(cached.map((w) => w.no_kk)).size || 4;
-
-          setStats({
-            totalWarga: total,
-            wargaMiskin: miskin,
-            wargaRentan: rentan,
-            penerimaBansos: 2,
-            totalKK: uniqueKK,
-          });
-        }
-      } catch (err) {
-        console.warn('Dashboard stats error:', err);
-      } finally {
-        setLoading(false);
+      // Terapkan isolasi wilayah
+      if (profile?.role === 'rt') {
+        if (profile.wilayah_rt) wargaQuery = wargaQuery.eq('rt', profile.wilayah_rt);
+        if (profile.wilayah_rw) wargaQuery = wargaQuery.eq('rw', profile.wilayah_rw);
+      } else if (profile?.role === 'rw') {
+        if (profile.wilayah_rw) wargaQuery = wargaQuery.eq('rw', profile.wilayah_rw);
+      } else if (profile?.role === 'dusun') {
+        if (profile.wilayah_dusun) wargaQuery = wargaQuery.eq('dusun', profile.wilayah_dusun);
       }
-    }
 
+      const { data: wargaData } = await wargaQuery;
+
+      if (wargaData && wargaData.length > 0) {
+        const total = wargaData.length;
+        const miskin = wargaData.filter((w) => w.status_ekonomi === 'miskin').length;
+        const rentan = wargaData.filter((w) => w.status_ekonomi === 'rentan').length;
+        const uniqueKK = new Set(wargaData.map((w) => w.no_kk)).size;
+
+        const { count: bansosCount } = await supabase
+          .from('penerima_bansos')
+          .select('*', { count: 'exact', head: true });
+
+        setStats({
+          totalWarga: total,
+          wargaMiskin: miskin,
+          wargaRentan: rentan,
+          penerimaBansos: bansosCount || 2,
+          totalKK: uniqueKK,
+        });
+      } else {
+        // Fallback ke local cache dengan isolasi wilayah ketat
+        const cached = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
+        let filtered = cached.filter((w) => w.status_kependudukan === 'aktif');
+
+        if (profile?.role === 'rt') {
+          filtered = filtered.filter(
+            (w) =>
+              normalizeWilayah(w.rt) === normalizeWilayah(profile.wilayah_rt) &&
+              normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
+          );
+        } else if (profile?.role === 'rw') {
+          filtered = filtered.filter(
+            (w) => normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
+          );
+        } else if (profile?.role === 'dusun') {
+          filtered = filtered.filter(
+            (w) => w.dusun?.trim().toLowerCase() === profile.wilayah_dusun?.trim().toLowerCase()
+          );
+        }
+
+        const total = filtered.length || 0;
+        const miskin = filtered.filter((w) => w.status_ekonomi === 'miskin').length || 0;
+        const rentan = filtered.filter((w) => w.status_ekonomi === 'rentan').length || 0;
+        const uniqueKK = new Set(filtered.map((w) => w.no_kk)).size || 0;
+
+        setStats({
+          totalWarga: total,
+          wargaMiskin: miskin,
+          wargaRentan: rentan,
+          penerimaBansos: 2,
+          totalKK: uniqueKK,
+        });
+      }
+    } catch (err) {
+      console.warn('Dashboard stats error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     if (profile) loadStats();
+
+    // Realtime listeners
+    const channel = supabase
+      .channel('realtime-dashboard-stats')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'warga' },
+        () => loadStats()
+      )
+      .subscribe();
+
+    const handleLocalSync = () => loadStats();
+    window.addEventListener('warga-updated', handleLocalSync);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('warga-updated', handleLocalSync);
+    };
   }, [profile]);
 
   const roleTitle =
@@ -96,7 +137,9 @@ export default function DashboardPage({ setActiveTab }) {
       ? `Ketua RW ${profile?.wilayah_rw || ''}`
       : `Ketua RT ${profile?.wilayah_rt || '01'} / RW ${profile?.wilayah_rw || '01'}`;
 
-  const miskinPercentage = stats.totalWarga ? Math.round((stats.wargaMiskin / stats.totalWarga) * 100) : 0;
+  const miskinPercentage = stats.totalWarga
+    ? Math.round((stats.wargaMiskin / stats.totalWarga) * 100)
+    : 0;
 
   return (
     <div className="pb-28 pt-4 px-4 max-w-md mx-auto">
@@ -124,9 +167,8 @@ export default function DashboardPage({ setActiveTab }) {
         </div>
       </div>
 
-      {/* Hero Welcome Banner */}
+      {/* Hero Welcome Banner (Dinamis dengan Nama Desa & Kades) */}
       <div className="relative overflow-hidden bg-gradient-to-br from-teal-800 via-teal-700 to-emerald-900 rounded-3xl p-5 text-white shadow-xl shadow-teal-950/15 mb-4">
-        {/* Decorative elements */}
         <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
         <div className="absolute right-4 top-4 text-emerald-300/20">
           <Sparkles size={54} />
@@ -142,16 +184,25 @@ export default function DashboardPage({ setActiveTab }) {
           </h2>
 
           <div className="mt-1 flex items-center gap-1.5 text-xs text-teal-100">
+            <Building2 size={13} className="text-emerald-300 flex-shrink-0" />
+            <span>
+              Pemerintah Desa {pengaturanDesa?.nama_desa || 'Sukamaju'} (Kades: {pengaturanDesa?.nama_kepala_desa})
+            </span>
+          </div>
+
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-teal-100">
             <MapPin size={13} className="text-emerald-300 flex-shrink-0" />
             <span>
               {profile?.wilayah_rt ? `RT ${profile.wilayah_rt} ` : ''}
               {profile?.wilayah_rw ? `/ RW ${profile.wilayah_rw} ` : ''}
-              {profile?.wilayah_dusun ? `• Dusun ${profile.wilayah_dusun}` : 'Kewenangan Seluruh Wilayah Desa'}
+              {profile?.wilayah_dusun
+                ? `• Dusun ${profile.wilayah_dusun}`
+                : 'Kewenangan: Seluruh Desa'}
             </span>
           </div>
 
           <div className="mt-3.5 pt-3 border-t border-white/15 flex items-center justify-between text-[11px] text-teal-100">
-            <span>Sistem Informasi Administrasi PWA</span>
+            <span>Sistem Informasi Desa PWA</span>
             <span className="font-semibold text-emerald-300">{roleTitle}</span>
           </div>
         </div>
@@ -170,7 +221,15 @@ export default function DashboardPage({ setActiveTab }) {
             {stats.totalWarga}
           </div>
           <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
-            <span>Jiwa aktif di wilayah</span>
+            <span>
+              {profile?.role === 'rt'
+                ? `Jiwa di RT ${profile.wilayah_rt}`
+                : profile?.role === 'rw'
+                ? `Jiwa di RW ${profile.wilayah_rw}`
+                : profile?.role === 'dusun'
+                ? `Jiwa Dusun ${profile.wilayah_dusun}`
+                : 'Jiwa aktif desa'}
+            </span>
           </div>
         </div>
 
@@ -290,14 +349,14 @@ export default function DashboardPage({ setActiveTab }) {
 
           {profile?.role === 'admin' ? (
             <button
-              onClick={() => setActiveTab('mutasi')}
-              className="p-3 rounded-2xl bg-blue-50/70 hover:bg-blue-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
+              onClick={() => setActiveTab('kelola')}
+              className="p-3 rounded-2xl bg-purple-50/70 hover:bg-purple-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
             >
-              <div className="p-2 rounded-xl bg-white text-blue-700 shadow-sm mb-1.5 group-hover:scale-110 transition-transform">
-                <FileSpreadsheet size={20} />
+              <div className="p-2 rounded-xl bg-white text-purple-700 shadow-sm mb-1.5 group-hover:scale-110 transition-transform">
+                <Settings size={20} />
               </div>
-              <span className="text-[11px] font-bold text-slate-700">Mutasi</span>
-              <span className="text-[9.5px] text-slate-400">Lahir & Pindah</span>
+              <span className="text-[11px] font-bold text-slate-700">Kelola PIN</span>
+              <span className="text-[9.5px] text-slate-400">Desa & Aparat</span>
             </button>
           ) : (
             <button
@@ -318,10 +377,10 @@ export default function DashboardPage({ setActiveTab }) {
       <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center gap-2 text-amber-800 font-bold text-xs mb-1">
           <Bell size={15} />
-          <span>Agenda & Pengumuman Desa</span>
+          <span>Agenda & Pengumuman Desa {pengaturanDesa?.nama_desa}</span>
         </div>
         <p className="text-[11px] text-amber-900 leading-relaxed">
-          Penyaluran BLT Dana Desa Tahap I dijadwalkan tanggal 25 bulan ini di Kantor Desa. Harap Ketua RT memverifikasi data warga prasejahtera.
+          Penyaluran BLT Dana Desa Tahap I dijadwalkan tanggal 25 bulan ini di Kantor Desa. Harap Ketua RT memverifikasi data warga prasejahtera di wilayah masing-masing.
         </p>
       </div>
     </div>

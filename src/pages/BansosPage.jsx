@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { normalizeWilayah } from './WargaPage';
 import {
   ShieldCheck,
   AlertCircle,
@@ -8,7 +9,6 @@ import {
   CheckCircle2,
   Clock,
   Plus,
-  X,
   UserCheck,
   Search,
 } from 'lucide-react';
@@ -43,8 +43,6 @@ export default function BansosPage() {
   const [loading, setLoading] = useState(true);
   const [verifyingId, setVerifyingId] = useState(null);
 
-  const isAdmin = profile?.role === 'admin';
-
   const loadData = async () => {
     setLoading(true);
     try {
@@ -67,7 +65,7 @@ export default function BansosPage() {
         .eq('status_ekonomi', 'miskin')
         .eq('status_kependudukan', 'aktif');
 
-      // Territory filtering
+      // Territory filtering di query Supabase
       if (profile?.role === 'rt') {
         if (profile.wilayah_rt) poorQuery = poorQuery.eq('rt', profile.wilayah_rt);
         if (profile.wilayah_rw) poorQuery = poorQuery.eq('rw', profile.wilayah_rw);
@@ -82,42 +80,78 @@ export default function BansosPage() {
       if (!poorErr && poorData && poorData.length > 0) {
         setUnassistedPoor(poorData);
       } else {
-        // Fallback demo poor warga
-        setUnassistedPoor([
-          {
-            id: 'w-1',
-            nama: 'Bambang Sudarmono',
-            nik: '3201011203850001',
-            rt: '01',
-            rw: '01',
-            dusun: 'Sukamaju',
-            status_ekonomi: 'miskin',
-          },
-          {
-            id: 'w-2',
-            nama: 'Siti Aminah',
-            nik: '3201015506890002',
-            rt: '01',
-            rw: '01',
-            dusun: 'Sukamaju',
-            status_ekonomi: 'miskin',
-          },
-          {
-            id: 'w-6',
-            nama: 'Solihin bin Kosasih',
-            nik: '3201010101700006',
-            rt: '01',
-            rw: '01',
-            dusun: 'Sukamaju',
-            status_ekonomi: 'miskin',
-          },
-        ]);
+        // Fallback demo poor warga dengan filter ketat wilayah
+        const cachedWarga = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
+        let poorWarga = cachedWarga.filter(
+          (w) => w.status_ekonomi === 'miskin' && w.status_kependudukan === 'aktif'
+        );
+
+        if (poorWarga.length === 0) {
+          poorWarga = [
+            {
+              id: 'w-1',
+              nama: 'Bambang Sudarmono',
+              nik: '3201011203850001',
+              rt: '01',
+              rw: '01',
+              dusun: 'Sukamaju',
+              status_ekonomi: 'miskin',
+            },
+            {
+              id: 'w-2',
+              nama: 'Siti Aminah',
+              nik: '3201015506890002',
+              rt: '01',
+              rw: '01',
+              dusun: 'Sukamaju',
+              status_ekonomi: 'miskin',
+            },
+            {
+              id: 'w-6',
+              nama: 'Solihin bin Kosasih',
+              nik: '3201010101700006',
+              rt: '01',
+              rw: '01',
+              dusun: 'Sukamaju',
+              status_ekonomi: 'miskin',
+            },
+            {
+              id: 'w-8',
+              nama: 'Herman Wijaya',
+              nik: '3201012502900008',
+              rt: '02',
+              rw: '01',
+              dusun: 'Sukamaju',
+              status_ekonomi: 'miskin',
+            },
+          ];
+        }
+
+        if (profile?.role === 'rt') {
+          poorWarga = poorWarga.filter(
+            (w) =>
+              normalizeWilayah(w.rt) === normalizeWilayah(profile.wilayah_rt) &&
+              normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
+          );
+        } else if (profile?.role === 'rw') {
+          poorWarga = poorWarga.filter(
+            (w) => normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
+          );
+        } else if (profile?.role === 'dusun') {
+          poorWarga = poorWarga.filter(
+            (w) => w.dusun?.trim().toLowerCase() === profile.wilayah_dusun?.trim().toLowerCase()
+          );
+        }
+
+        setUnassistedPoor(poorWarga);
       }
 
       // 3. Load Penerima Bansos
       const { data: penData, error: penErr } = await supabase
         .from('penerima_bansos')
-        .select('id, tanggal_terima, status_verifikasi, bansos_id, warga:warga_id (id, nama, nik, rt, rw, dusun), bantuan_sosial:bansos_id (nama_program)');
+        .select(
+          'id, tanggal_terima, status_verifikasi, bansos_id, warga:warga_id (id, nama, nik, rt, rw, dusun), bantuan_sosial:bansos_id (nama_program)'
+        );
 
       if (!penErr && penData && penData.length > 0) {
         setPenerimaList(penData);
@@ -148,13 +182,30 @@ export default function BansosPage() {
 
   useEffect(() => {
     loadData();
+
+    // Realtime listeners
+    const channel = supabase
+      .channel('realtime-bansos-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'warga' },
+        () => loadData()
+      )
+      .subscribe();
+
+    const handleLocalSync = () => loadData();
+    window.addEventListener('warga-updated', handleLocalSync);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('warga-updated', handleLocalSync);
+    };
   }, [profile]);
 
   const handleVerify = (warga) => {
     setVerifyingId(warga.id);
     setTimeout(() => {
-      alert(`Warga ${warga.nama} berhasil diverifikasi untuk pengajuan Bansos BLT Dana Desa!`);
-      // Add to penerima list locally
+      alert(`Warga ${warga.nama} berhasil diverifikasi untuk pengajuan Bantuan Sosial!`);
       setPenerimaList((prev) => [
         {
           id: 'pen-' + Date.now(),
@@ -227,7 +278,7 @@ export default function BansosPage() {
               <span>Flagging Anomali Kemiskinan</span>
             </div>
             <p className="text-[11px] text-amber-800 leading-relaxed">
-              Daftar warga berstatus ekonomi <strong>Miskin</strong> yang terdata di wilayah Anda dan memerlukan verifikasi penyaluran program bantuan.
+              Daftar warga berstatus ekonomi <strong>Miskin</strong> yang terdata di wilayah Anda dan memerlukan verifikasi bantuan sosial.
             </p>
           </div>
 

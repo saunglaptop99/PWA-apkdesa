@@ -1,13 +1,24 @@
 import React, { useState } from 'react';
 import jsPDF from 'jspdf';
-import { Printer, X, FileCheck, Info, CheckCircle2 } from 'lucide-react';
+import { useDesa } from '../../context/DesaContext';
+import { Printer, X, FileCheck, CheckCircle2 } from 'lucide-react';
 
 export default function SuratModal({ warga, onClose, userProfile }) {
+  const { pengaturanDesa } = useDesa();
+
   const [jenisSurat, setJenisSurat] = useState('Surat Pengantar Domisili');
   const [keperluan, setKeperluan] = useState('Pengurusan Administrasi Kependudukan');
-  const [namaPemerintah, setNamaPemerintah] = useState('PEMERINTAH KABUPATEN / DESA');
+
+  const [namaPemerintah, setNamaPemerintah] = useState(
+    `PEMERINTAH KABUPATEN ${(pengaturanDesa?.nama_kabupaten || 'BOGOR').toUpperCase()}`
+  );
+  const [namaKecamatanDesa, setNamaKecamatanDesa] = useState(
+    `KECAMATAN ${(pengaturanDesa?.nama_kecamatan || 'SUKARAJA').toUpperCase()} • DESA ${(pengaturanDesa?.nama_desa || 'SUKAMAJU').toUpperCase()}`
+  );
   const [namaKadesOrRT, setNamaKadesOrRT] = useState(
-    userProfile?.nama_lengkap || 'Pengurus Wilayah'
+    userProfile?.role === 'admin'
+      ? pengaturanDesa?.nama_kepala_desa || userProfile?.nama_lengkap
+      : userProfile?.nama_lengkap || 'Pengurus Wilayah'
   );
   const [jabatan, setJabatan] = useState(
     userProfile?.role === 'rt'
@@ -16,7 +27,7 @@ export default function SuratModal({ warga, onClose, userProfile }) {
       ? `Ketua RW ${warga.rw}`
       : userProfile?.role === 'dusun'
       ? `Kepala Dusun ${warga.dusun}`
-      : 'Kepala Desa / Sekretaris Desa'
+      : `Kepala Desa ${pengaturanDesa?.nama_desa || 'Sukamaju'}`
   );
   const [successNotif, setSuccessNotif] = useState(false);
 
@@ -38,47 +49,49 @@ export default function SuratModal({ warga, onClose, userProfile }) {
 
     const pageWidth = doc.internal.pageSize.getWidth();
 
-    // KOP SURAT
+    // KOP SURAT RESMI DESA
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text(namaPemerintah.toUpperCase(), pageWidth / 2, 22, { align: 'center' });
+    doc.setFontSize(13);
+    doc.text(namaPemerintah.toUpperCase(), pageWidth / 2, 20, { align: 'center' });
 
-    doc.setFontSize(11);
+    doc.setFontSize(12);
+    doc.text(namaKecamatanDesa.toUpperCase(), pageWidth / 2, 26, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
     doc.text(
       `RUKUN TETANGGA ${warga.rt || '01'} / RUKUN WARGA ${warga.rw || '01'} DUSUN ${(warga.dusun || 'DESA').toUpperCase()}`,
       pageWidth / 2,
-      28,
+      32,
       { align: 'center' }
     );
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text('Kecamatan dan Wilayah Administrasi Pemerintahan Terpadu', pageWidth / 2, 33, { align: 'center' });
-
     // Double Line Border Under Kop
     doc.setLineWidth(0.8);
-    doc.line(20, 37, pageWidth - 20, 37);
+    doc.line(20, 36, pageWidth - 20, 36);
     doc.setLineWidth(0.2);
-    doc.line(20, 38.5, pageWidth - 20, 38.5);
+    doc.line(20, 37.5, pageWidth - 20, 37.5);
 
     // JUDUL SURAT
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     const judulSuratUpper = jenisSurat.toUpperCase();
-    doc.text(judulSuratUpper, pageWidth / 2, 50, { align: 'center' });
+    doc.text(judulSuratUpper, pageWidth / 2, 48, { align: 'center' });
 
     // Underline Judul
     const titleWidth = doc.getTextWidth(judulSuratUpper);
-    doc.line((pageWidth - titleWidth) / 2, 51.5, (pageWidth + titleWidth) / 2, 51.5);
+    doc.line((pageWidth - titleWidth) / 2, 49.5, (pageWidth + titleWidth) / 2, 49.5);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    const noSurat = `Nomor: 470 / ${Math.floor(100 + Math.random() * 900)} / ${warga.rt ? `RT.${warga.rt}` : 'PEM'}-${warga.rw ? `RW.${warga.rw}` : 'DESA'} / ${new Date().getFullYear()}`;
-    doc.text(noSurat, pageWidth / 2, 57, { align: 'center' });
+    const noSurat = `Nomor: 470 / ${Math.floor(100 + Math.random() * 900)} / ${
+      warga.rt ? `RT.${warga.rt}` : 'PEM'
+    }-${warga.rw ? `RW.${warga.rw}` : 'DS'} / ${new Date().getFullYear()}`;
+    doc.text(noSurat, pageWidth / 2, 55, { align: 'center' });
 
     // ISI SURAT
     doc.setFontSize(10.5);
-    doc.text('Yang bertanda tangan di bawah ini menerangkan dengan sesungguhnya bahwa:', 22, 70);
+    doc.text('Yang bertanda tangan di bawah ini menerangkan dengan sesungguhnya bahwa:', 22, 68);
 
     const dataRows = [
       ['Nama Lengkap', `: ${warga.nama}`],
@@ -88,13 +101,13 @@ export default function SuratModal({ warga, onClose, userProfile }) {
       ['Jenis Kelamin', `: ${warga.jenis_kelamin || '-'}`],
       ['Agama', `: ${warga.agama || 'Islam'}`],
       ['Pekerjaan', `: ${warga.pekerjaan || '-'}`],
-      ['Status Perkawinan / SHDK', `: ${warga.shdk || 'Kepala Keluarga'}`],
-      ['Alamat KTP', `: RT ${warga.rt} / RW ${warga.rw}, Dusun ${warga.dusun}`],
+      ['Status Hubungan (SHDK)', `: ${warga.shdk || 'Kepala Keluarga'}`],
+      ['Alamat KTP', `: RT ${warga.rt} / RW ${warga.rw}, Dusun ${warga.dusun}, Desa ${pengaturanDesa?.nama_desa || 'Sukamaju'}`],
       ['Status Ekonomi', `: ${warga.status_ekonomi ? warga.status_ekonomi.toUpperCase() : 'MAMPU'}`],
       ['Keperluan', `: ${keperluan}`],
     ];
 
-    let currentY = 80;
+    let currentY = 77;
     dataRows.forEach(([key, val]) => {
       doc.setFont('helvetica', 'normal');
       doc.text(key, 25, currentY);
@@ -105,7 +118,7 @@ export default function SuratModal({ warga, onClose, userProfile }) {
 
     // PARAGRAF PENUTUP
     currentY += 4;
-    const penutup = 'Orang tersebut di atas adalah benar-benar warga penduduk yang bertempat tinggal di wilayah kami dan berkelakuan baik. Surat pengantar ini dibuat untuk dipergunakan sebagaimana perlunya.';
+    const penutup = `Orang tersebut di atas adalah benar-benar warga penduduk yang bertempat tinggal di wilayah Desa ${pengaturanDesa?.nama_desa || 'Sukamaju'} dan berkelakuan baik. Surat pengantar ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.`;
     const splitPenutup = doc.splitTextToSize(penutup, pageWidth - 44);
     doc.setFont('helvetica', 'normal');
     doc.text(splitPenutup, 22, currentY);
@@ -120,25 +133,26 @@ export default function SuratModal({ warga, onClose, userProfile }) {
     currentY += 24;
     const ttdX = pageWidth - 80;
 
-    doc.text(`Dikeluarkan di Desa, ${tglSekarang}`, ttdX, currentY);
-    doc.text(jabatan, ttdX, currentY + 6);
+    doc.text(`Dikeluarkan di: ${pengaturanDesa?.nama_desa || 'Desa'}`, ttdX, currentY);
+    doc.text(`Pada tanggal: ${tglSekarang}`, ttdX, currentY + 5.5);
+    doc.text(jabatan, ttdX, currentY + 11);
 
     // Signature Space & Stamped indicator
     doc.setDrawColor(200, 200, 200);
     doc.setFontSize(8.5);
     doc.setTextColor(140, 140, 140);
-    doc.text('[ Cap & Tanda Tangan ]', ttdX + 5, currentY + 22);
+    doc.text('[ Cap & Tanda Tangan ]', ttdX + 4, currentY + 25);
 
     doc.setTextColor(20, 20, 20);
     doc.setFontSize(10.5);
     doc.setFont('helvetica', 'bold');
-    doc.text(`( ${namaKadesOrRT} )`, ttdX, currentY + 36);
+    doc.text(`( ${namaKadesOrRT} )`, ttdX, currentY + 38);
 
     // Footer note
     doc.setFontSize(8);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(100, 100, 100);
-    doc.text('* Dokumen sah diterbitkan melalui Aplikasi SIM Aparat Desa Mobile PWA.', 22, 282);
+    doc.text(`* Dokumen sah diterbitkan melalui Aplikasi SIM Aparat Desa ${pengaturanDesa?.nama_desa || ''} Mobile PWA.`, 22, 282);
 
     const safeFileName = `${jenisSurat.replace(/\s+/g, '_')}_${warga.nama.replace(/\s+/g, '_')}.pdf`;
     doc.save(safeFileName);
@@ -157,7 +171,9 @@ export default function SuratModal({ warga, onClose, userProfile }) {
             </div>
             <div>
               <h3 className="font-bold text-slate-800 text-base">Cetak Surat Pengantar</h3>
-              <p className="text-[11px] text-slate-500">Generator PDF Sekali Klik Format Resmi</p>
+              <p className="text-[11px] text-slate-500">
+                Pemerintah Desa {pengaturanDesa?.nama_desa} • 1-Klik Unduh PDF
+              </p>
             </div>
           </div>
           <button

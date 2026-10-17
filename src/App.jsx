@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { DesaProvider } from './context/DesaContext';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import WargaPage from './pages/WargaPage';
 import BansosPage from './pages/BansosPage';
 import MutasiPage from './pages/MutasiPage';
+import AdminPanelPage from './pages/AdminPanelPage';
 import ProfilPage from './pages/ProfilPage';
 import BottomNav from './components/common/BottomNav';
 import { WifiOff, ShieldCheck } from 'lucide-react';
@@ -49,6 +51,7 @@ function MainLayout() {
           {activeTab === 'dashboard' && <DashboardPage setActiveTab={setActiveTab} />}
           {activeTab === 'warga' && <WargaPage />}
           {activeTab === 'mutasi' && profile?.role === 'admin' && <MutasiPage />}
+          {activeTab === 'kelola' && profile?.role === 'admin' && <AdminPanelPage />}
           {activeTab === 'bansos' && <BansosPage />}
           {activeTab === 'profil' && <ProfilPage />}
         </main>
@@ -67,7 +70,9 @@ function MainLayout() {
 export default function App() {
   return (
     <AuthProvider>
-      <MainLayout />
+      <DesaProvider>
+        <MainLayout />
+      </DesaProvider>
     </AuthProvider>
   );
 }
