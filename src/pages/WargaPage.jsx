@@ -713,84 +713,85 @@ export default function WargaPage() {
   const isAdmin = profile?.role === 'admin';
 
   return (
-    <div className="pb-28 pt-4 px-3 sm:px-4 max-w-4xl mx-auto animate-fade-in">
-      {/* Header Info Wilayah Sesuai Role Pengguna */}
-      <div className="flex justify-between items-start mb-3 gap-2">
-        <div>
-          <div className="flex items-center gap-1.5">
-            <div className="p-1.5 rounded-lg bg-teal-100 text-teal-800">
-              <Users size={16} />
+    <div className="pb-28 max-w-4xl mx-auto animate-fade-in relative">
+      {/* 1. STICKY HEADER: TERKUNCI TETAP DI ATAS SAAT SCROLLING KEBAWAH */}
+      <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md px-3 sm:px-4 pt-3 pb-2.5 border-b border-slate-200/80 shadow-xs space-y-2">
+        {/* Baris 1: Judul Halaman & Tombol Aksi */}
+        <div className="flex justify-between items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <div className="p-1.5 rounded-lg bg-teal-100 text-teal-800 flex-shrink-0">
+                <Users size={16} />
+              </div>
+              <h2 className="text-base sm:text-lg font-black text-slate-800 tracking-tight truncate">
+                Data Kependudukan
+              </h2>
             </div>
-            <h2 className="text-lg font-black text-slate-800 tracking-tight">Data Kependudukan</h2>
+            <p className="text-[10.5px] text-slate-500 mt-0.5 truncate">
+              Wilayah Aktif: <strong className="text-teal-700 font-bold">{profile?.role?.toUpperCase()}</strong>
+              {profile?.wilayah_rt ? ` • RT ${profile.wilayah_rt}` : ''}
+              {profile?.wilayah_rw ? ` / RW ${profile.wilayah_rw}` : ''}
+              {profile?.wilayah_dusun ? ` • Dusun ${profile.wilayah_dusun}` : ''}
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            Wilayah Aktif: <strong className="text-teal-700">{profile?.role?.toUpperCase()}</strong>
-            {profile?.wilayah_rt ? ` • RT ${profile.wilayah_rt}` : ''}
-            {profile?.wilayah_rw ? ` / RW ${profile.wilayah_rw}` : ''}
-            {profile?.wilayah_dusun ? ` • Dusun ${profile.wilayah_dusun}` : ''}
-          </p>
+
+          {isAdmin && (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowRekapModal(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 active:scale-95 shadow-2xs flex items-center gap-1.5 text-xs font-bold transition-all"
+                title="Rekapitulasi dan Unduh Data Kependudukan per RT/RW dan Dusun"
+              >
+                <FileSpreadsheet size={14} className="text-teal-700" />
+                <span className="hidden sm:inline">Rekap & Unduh</span>
+                <span className="sm:hidden">Rekap</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white shadow-md shadow-teal-900/10 flex items-center gap-1 text-xs font-bold transition-all"
+                title="Tambah Warga Baru"
+              >
+                <UserPlus size={14} />
+                <span>Tambah</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setShowRekapModal(true)}
-              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 active:scale-95 shadow-2xs flex items-center gap-1.5 text-xs font-bold transition-all"
-              title="Rekapitulasi dan Unduh Data Kependudukan"
-            >
-              <FileSpreadsheet size={15} className="text-teal-700" />
-              <span className="hidden sm:inline">Rekap & Unduh</span>
-            </button>
+        {/* Baris 2: Indikator Realtime Terhubung */}
+        <div className="px-2.5 py-1.5 rounded-xl bg-teal-50/90 border border-teal-100 flex items-center justify-between text-[10px] text-teal-800">
+          <div className="flex items-center gap-1.5 font-semibold truncate">
+            <span className="relative flex h-2 w-2 flex-shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="truncate">Database Realtime Terhubung ke Semua Role</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchWarga}
+            className="flex items-center gap-1 hover:text-teal-950 font-bold flex-shrink-0 ml-2 transition-colors"
+          >
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
 
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white shadow-md shadow-teal-900/10 flex items-center gap-1 text-xs font-bold transition-all"
-              title="Tambah Warga Baru"
-            >
-              <UserPlus size={15} />
-              <span className="hidden sm:inline">Tambah Warga</span>
-            </button>
+      {/* 2. KONTEN UTAMA YANG DAPAT DI-SCROLL */}
+      <div className="px-3 sm:px-4 pt-3 space-y-3">
+        {/* Alat Ekspor / Impor Data Excel */}
+        {isAdmin && (
+          <div className="p-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-slate-700">Ekspor / Impor Data:</span>
+            <ExcelImportExport onRefresh={handleWargaSuccess} wargaList={filtered} />
           </div>
         )}
-      </div>
 
-      {/* Indikator Realtime Sinkronisasi */}
-      <div className="mb-3 px-3 py-1.5 rounded-xl bg-teal-50/80 border border-teal-100 flex items-center justify-between text-[10.5px] text-teal-800">
-        <div className="flex items-center gap-1.5 font-semibold">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span>Database Realtime Terhubung ke Semua Role</span>
-        </div>
-        <button
-          onClick={fetchWarga}
-          className="flex items-center gap-1 hover:text-teal-950 font-bold"
-        >
-          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          <span>Refresh</span>
-        </button>
-      </div>
-
-      {/* Admin Import/Export & Rekap Bar */}
-      {isAdmin && (
-        <div className="mb-3 p-3 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-700">Alat Administrasi Desa:</span>
-            <button
-              onClick={() => setShowRekapModal(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95"
-            >
-              <FileSpreadsheet size={13} className="text-teal-700" />
-              <span>Rekap Wilayah & Unduh</span>
-            </button>
-          </div>
-          <ExcelImportExport onRefresh={handleWargaSuccess} wargaList={filtered} />
-        </div>
-      )}
-
-      {/* Pencarian & Filter Cepat */}
-      <div className="space-y-2 mb-3.5">
+        {/* Pencarian Warga Cepat */}
         <div className="relative">
           <Search className="absolute left-3.5 top-3 text-slate-400" size={16} />
           <input
@@ -798,10 +799,11 @@ export default function WargaPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cari No. KK, NIK, atau Nama Warga..."
-            className="w-full pl-9 pr-8 py-2.5 bg-white rounded-2xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none shadow-sm"
+            className="w-full pl-9 pr-8 py-2.5 bg-white rounded-2xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none shadow-xs transition-all"
           />
           {search && (
             <button
+              type="button"
               onClick={() => setSearch('')}
               className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
             >
@@ -810,13 +812,13 @@ export default function WargaPage() {
           )}
         </div>
 
-        {/* PANEL FILTER KHUSUS ADMIN: RT/RW, Dusun, KK & Kepala Keluarga */}
+        {/* PANEL FILTER KHUSUS ADMIN (WILAYAH, KK, & KEPALA KELUARGA) */}
         {isAdmin && (
-          <div className="p-3 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5 animate-fade-in">
-            <div className="flex items-center justify-between">
+          <div className="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-3 animate-fade-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="text-[11px] font-black text-slate-700 flex items-center gap-1.5 uppercase tracking-wider">
-                <Filter size={12} className="text-teal-700" />
-                Filter Wilayah & Kependudukan (Admin)
+                <Filter size={13} className="text-teal-700" />
+                Filter Wilayah & Kependudukan
               </span>
               {hasActiveFilter && (
                 <button
@@ -824,15 +826,15 @@ export default function WargaPage() {
                   onClick={resetAllFilters}
                   className="text-[10.5px] font-bold text-rose-600 hover:text-rose-800 transition-colors"
                 >
-                  Reset Filter
+                  Reset Semua Filter
                 </button>
               )}
             </div>
 
-            {/* Dropdown 3 Kolom: Dusun, RW, RT */}
+            {/* Baris 1: Filter Wilayah 3 Kolom Presisi (Dusun, RW, RT) */}
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
+                <label className="text-[9.5px] text-slate-500 font-bold block mb-1 uppercase tracking-wider">
                   Dusun
                 </label>
                 <select
@@ -842,7 +844,7 @@ export default function WargaPage() {
                     setFilterRw('all');
                     setFilterRt('all');
                   }}
-                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
+                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
                 >
                   <option value="all">Semua Dusun</option>
                   {dusunList.map((d) => (
@@ -854,7 +856,7 @@ export default function WargaPage() {
               </div>
 
               <div>
-                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
+                <label className="text-[9.5px] text-slate-500 font-bold block mb-1 uppercase tracking-wider">
                   RW
                 </label>
                 <select
@@ -863,7 +865,7 @@ export default function WargaPage() {
                     setFilterRw(e.target.value);
                     setFilterRt('all');
                   }}
-                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
+                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
                 >
                   <option value="all">Semua RW</option>
                   {rwList.map((rw) => (
@@ -875,13 +877,13 @@ export default function WargaPage() {
               </div>
 
               <div>
-                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
+                <label className="text-[9.5px] text-slate-500 font-bold block mb-1 uppercase tracking-wider">
                   RT
                 </label>
                 <select
                   value={filterRt}
                   onChange={(e) => setFilterRt(e.target.value)}
-                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
+                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
                 >
                   <option value="all">Semua RT</option>
                   {rtList.map((rt) => (
@@ -893,108 +895,105 @@ export default function WargaPage() {
               </div>
             </div>
 
-            {/* Baris 2: Filter Kepala Keluarga (SHDK) & No. KK */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-              {/* Filter Kepala Keluarga */}
-              <div>
-                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
-                  Status Hubungan Keluarga
-                </label>
-                <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-100 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setFilterShdk('all')}
-                    className={`py-1 text-[10.5px] font-bold rounded-lg transition-all ${
-                      filterShdk === 'all'
-                        ? 'bg-white text-slate-800 shadow-2xs'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    Semua
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterShdk('Kepala Keluarga')}
-                    className={`py-1 text-[10.5px] font-bold rounded-lg transition-all ${
-                      filterShdk === 'Kepala Keluarga'
-                        ? 'bg-teal-700 text-white shadow-2xs'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    👑 Kepala KK
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterShdk('Bukan Kepala Keluarga')}
-                    className={`py-1 text-[10.5px] font-bold rounded-lg transition-all ${
-                      filterShdk === 'Bukan Kepala Keluarga'
-                        ? 'bg-white text-slate-800 shadow-2xs'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    Anggota
-                  </button>
-                </div>
+            {/* Baris 2: Filter Status Hubungan Keluarga (Full Width, Rapi & Anti-Wrap) */}
+            <div className="pt-2 border-t border-slate-100">
+              <label className="text-[9.5px] text-slate-500 font-bold block mb-1.5 uppercase tracking-wider">
+                Status Hubungan dalam Keluarga (SHDK):
+              </label>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl text-center">
+                <button
+                  type="button"
+                  onClick={() => setFilterShdk('all')}
+                  className={`py-1.5 px-2 text-[11px] font-bold rounded-lg transition-all ${
+                    filterShdk === 'all'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Semua Warga
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterShdk('Kepala Keluarga')}
+                  className={`py-1.5 px-2 text-[11px] font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                    filterShdk === 'Kepala Keluarga'
+                      ? 'bg-teal-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-teal-800'
+                  }`}
+                >
+                  <span>👑 Kepala KK</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterShdk('Bukan Kepala Keluarga')}
+                  className={`py-1.5 px-2 text-[11px] font-bold rounded-lg transition-all ${
+                    filterShdk === 'Bukan Kepala Keluarga'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Anggota Lain
+                </button>
               </div>
+            </div>
 
-              {/* Filter Khusus No. KK */}
-              <div>
-                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
-                  Filter No. Kartu Keluarga (KK)
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={filterNoKk}
-                    onChange={(e) => setFilterNoKk(e.target.value)}
-                    placeholder="Ketik digit No. KK..."
-                    className="w-full py-1.5 pl-2.5 pr-7 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 outline-none focus:ring-1 focus:ring-teal-600"
-                  />
-                  {filterNoKk && (
-                    <button
-                      type="button"
-                      onClick={() => setFilterNoKk('')}
-                      className="absolute right-2 top-1.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
+            {/* Baris 3: Filter Khusus No. Kartu Keluarga (KK) */}
+            <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider whitespace-nowrap">
+                No. Kartu Keluarga (KK):
+              </label>
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={filterNoKk}
+                  onChange={(e) => setFilterNoKk(e.target.value)}
+                  placeholder="Ketik 16 digit No. KK..."
+                  className="w-full py-1.5 pl-3 pr-7 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 outline-none focus:ring-1 focus:ring-teal-600 focus:bg-white transition-all"
+                />
+                {filterNoKk && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterNoKk('')}
+                    className="absolute right-2.5 top-1.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Active Filters Badges Indicator */}
             {hasActiveFilter && (
-              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100 text-[10px]">
+              <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100 text-[10px]">
                 <span className="text-slate-400 font-bold">Filter Aktif:</span>
                 {filterDusun !== 'all' && (
                   <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200">
                     Dusun: {filterDusun}
-                    <button onClick={() => setFilterDusun('all')}>×</button>
+                    <button type="button" onClick={() => setFilterDusun('all')}>×</button>
                   </span>
                 )}
                 {filterRw !== 'all' && (
                   <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200">
                     RW {filterRw}
-                    <button onClick={() => setFilterRw('all')}>×</button>
+                    <button type="button" onClick={() => setFilterRw('all')}>×</button>
                   </span>
                 )}
                 {filterRt !== 'all' && (
                   <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200">
                     RT {filterRt}
-                    <button onClick={() => setFilterRt('all')}>×</button>
+                    <button type="button" onClick={() => setFilterRt('all')}>×</button>
                   </span>
                 )}
                 {filterShdk !== 'all' && (
                   <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200">
                     {filterShdk === 'Kepala Keluarga' ? '👑 Kepala KK Saja' : 'Anggota Saja'}
-                    <button onClick={() => setFilterShdk('all')}>×</button>
+                    <button type="button" onClick={() => setFilterShdk('all')}>×</button>
                   </span>
                 )}
                 {filterNoKk && (
                   <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200 font-mono">
                     KK: {filterNoKk}
-                    <button onClick={() => setFilterNoKk('')}>×</button>
+                    <button type="button" onClick={() => setFilterNoKk('')}>×</button>
                   </span>
                 )}
               </div>
@@ -1018,9 +1017,8 @@ export default function WargaPage() {
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Baris Ringkasan & Paginasi Info */}
+        {/* Baris Ringkasan & Paginasi Info */}
       <div className="px-1 mb-2.5 text-[11px] text-slate-500 font-medium flex justify-between items-center flex-wrap gap-1">
         <span>
           Menampilkan{' '}
@@ -1194,6 +1192,7 @@ export default function WargaPage() {
           </div>
         </div>
       )}
+      </div>
 
       {/* MODAL DETAIL LENGKAP WARGA (MUNCUL KETIKA BARIS WARGA DIKLIK) */}
       {selectedDetailWarga && (
