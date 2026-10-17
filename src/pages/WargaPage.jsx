@@ -29,10 +29,15 @@ import {
   HeartPulse,
   Activity,
   ExternalLink,
+  Filter,
+  Building,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import SuratModal from '../components/surat/SuratModal';
 import ExcelImportExport from '../components/warga/ExcelImportExport';
 import WargaFormModal from '../components/warga/WargaFormModal';
+import RekapDownloadModal from '../components/warga/RekapDownloadModal';
 
 // Sample fallback warga in case database is freshly created or offline
 const INITIAL_DEMO_WARGA = [
@@ -404,11 +409,20 @@ export const normalizeWilayah = (val) => {
 
 export default function WargaPage() {
   const { profile } = useAuth();
-  const { pengaturanDesa } = useDesa();
+  const { pengaturanDesa, getDusunOptions, getRwOptions, getRtOptions } = useDesa();
 
   const [warga, setWarga] = useState([]);
   const [search, setSearch] = useState('');
   const [filterEkonomi, setFilterEkonomi] = useState('all');
+
+  // Filter Khusus Admin: RT/RW, Dusun, KK, Kepala Keluarga
+  const [filterDusun, setFilterDusun] = useState('all');
+  const [filterRw, setFilterRw] = useState('all');
+  const [filterRt, setFilterRt] = useState('all');
+  const [filterShdk, setFilterShdk] = useState('all'); // 'all' | 'Kepala Keluarga' | 'Bukan Kepala Keluarga'
+  const [filterNoKk, setFilterNoKk] = useState('');
+  const [showRekapModal, setShowRekapModal] = useState(false);
+
   const [selectedWargaSurat, setSelectedWargaSurat] = useState(null);
   const [editingWarga, setEditingWarga] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -421,6 +435,43 @@ export default function WargaPage() {
   // Pagination State (Menghindari scrolling panjang ke bawah)
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Dynamic Options untuk Dropdown Wilayah Admin
+  const dusunList = useMemo(() => {
+    return getDusunOptions ? getDusunOptions() : [];
+  }, [getDusunOptions]);
+
+  const rwList = useMemo(() => {
+    return getRwOptions ? getRwOptions(filterDusun !== 'all' ? filterDusun : '') : [];
+  }, [getRwOptions, filterDusun]);
+
+  const rtList = useMemo(() => {
+    return getRtOptions
+      ? getRtOptions(
+          filterDusun !== 'all' ? filterDusun : '',
+          filterRw !== 'all' ? filterRw : ''
+        )
+      : [];
+  }, [getRtOptions, filterDusun, filterRw]);
+
+  const hasActiveFilter =
+    filterDusun !== 'all' ||
+    filterRw !== 'all' ||
+    filterRt !== 'all' ||
+    filterShdk !== 'all' ||
+    Boolean(filterNoKk.trim()) ||
+    filterEkonomi !== 'all' ||
+    Boolean(search.trim());
+
+  const resetAllFilters = () => {
+    setFilterDusun('all');
+    setFilterRw('all');
+    setFilterRt('all');
+    setFilterShdk('all');
+    setFilterNoKk('');
+    setFilterEkonomi('all');
+    setSearch('');
+  };
 
   const fetchWarga = async () => {
     setLoading(true);
@@ -516,7 +567,16 @@ export default function WargaPage() {
   // Reset ke halaman 1 ketika pencarian, filter, atau ukuran halaman berubah
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterEkonomi, pageSize]);
+  }, [
+    search,
+    filterEkonomi,
+    filterDusun,
+    filterRw,
+    filterRt,
+    filterShdk,
+    filterNoKk,
+    pageSize,
+  ]);
 
   const handleDelete = async (id, nama) => {
     if (!confirm(`Hapus data warga ${nama}?`)) return;
@@ -590,9 +650,55 @@ export default function WargaPage() {
         w.nik?.includes(q) ||
         w.no_kk?.includes(q);
       const matchEkonomi = filterEkonomi === 'all' || w.status_ekonomi === filterEkonomi;
-      return matchSearch && matchEkonomi;
+
+      // Filter Dusun (Admin)
+      const matchDusun =
+        filterDusun === 'all' ||
+        w.dusun?.trim().toLowerCase() === filterDusun.trim().toLowerCase();
+
+      // Filter RW (Admin)
+      const matchRw =
+        filterRw === 'all' ||
+        normalizeWilayah(w.rw) === normalizeWilayah(filterRw);
+
+      // Filter RT (Admin)
+      const matchRt =
+        filterRt === 'all' ||
+        normalizeWilayah(w.rt) === normalizeWilayah(filterRt);
+
+      // Filter Kepala Keluarga (SHDK)
+      let matchShdk = true;
+      if (filterShdk === 'Kepala Keluarga') {
+        matchShdk = w.shdk === 'Kepala Keluarga';
+      } else if (filterShdk === 'Bukan Kepala Keluarga') {
+        matchShdk = w.shdk !== 'Kepala Keluarga';
+      }
+
+      // Filter No. KK
+      const matchNoKk =
+        !filterNoKk.trim() ||
+        String(w.no_kk || '').includes(filterNoKk.trim());
+
+      return (
+        matchSearch &&
+        matchEkonomi &&
+        matchDusun &&
+        matchRw &&
+        matchRt &&
+        matchShdk &&
+        matchNoKk
+      );
     });
-  }, [warga, search, filterEkonomi]);
+  }, [
+    warga,
+    search,
+    filterEkonomi,
+    filterDusun,
+    filterRw,
+    filterRt,
+    filterShdk,
+    filterNoKk,
+  ]);
 
   // Logika Paginasi (Pagination)
   const totalItems = filtered.length;
@@ -626,14 +732,25 @@ export default function WargaPage() {
         </div>
 
         {isAdmin && (
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white shadow-md shadow-teal-900/10 flex items-center gap-1 text-xs font-bold transition-all"
-            title="Tambah Warga Baru"
-          >
-            <UserPlus size={15} />
-            <span className="hidden sm:inline">Tambah Warga</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setShowRekapModal(true)}
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 active:scale-95 shadow-2xs flex items-center gap-1.5 text-xs font-bold transition-all"
+              title="Rekapitulasi dan Unduh Data Kependudukan"
+            >
+              <FileSpreadsheet size={15} className="text-teal-700" />
+              <span className="hidden sm:inline">Rekap & Unduh</span>
+            </button>
+
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white shadow-md shadow-teal-900/10 flex items-center gap-1 text-xs font-bold transition-all"
+              title="Tambah Warga Baru"
+            >
+              <UserPlus size={15} />
+              <span className="hidden sm:inline">Tambah Warga</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -655,11 +772,20 @@ export default function WargaPage() {
         </button>
       </div>
 
-      {/* Admin Import/Export Bar */}
+      {/* Admin Import/Export & Rekap Bar */}
       {isAdmin && (
-        <div className="mb-3 p-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex items-center justify-between">
-          <span className="text-[11px] font-bold text-slate-600">Alat Administrasi:</span>
-          <ExcelImportExport onRefresh={handleWargaSuccess} wargaList={warga} />
+        <div className="mb-3 p-3 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-700">Alat Administrasi Desa:</span>
+            <button
+              onClick={() => setShowRekapModal(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95"
+            >
+              <FileSpreadsheet size={13} className="text-teal-700" />
+              <span>Rekap Wilayah & Unduh</span>
+            </button>
+          </div>
+          <ExcelImportExport onRefresh={handleWargaSuccess} wargaList={filtered} />
         </div>
       )}
 
@@ -683,6 +809,198 @@ export default function WargaPage() {
             </button>
           )}
         </div>
+
+        {/* PANEL FILTER KHUSUS ADMIN: RT/RW, Dusun, KK & Kepala Keluarga */}
+        {isAdmin && (
+          <div className="p-3 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-slate-700 flex items-center gap-1.5 uppercase tracking-wider">
+                <Filter size={12} className="text-teal-700" />
+                Filter Wilayah & Kependudukan (Admin)
+              </span>
+              {hasActiveFilter && (
+                <button
+                  type="button"
+                  onClick={resetAllFilters}
+                  className="text-[10.5px] font-bold text-rose-600 hover:text-rose-800 transition-colors"
+                >
+                  Reset Filter
+                </button>
+              )}
+            </div>
+
+            {/* Dropdown 3 Kolom: Dusun, RW, RT */}
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
+                  Dusun
+                </label>
+                <select
+                  value={filterDusun}
+                  onChange={(e) => {
+                    setFilterDusun(e.target.value);
+                    setFilterRw('all');
+                    setFilterRt('all');
+                  }}
+                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
+                >
+                  <option value="all">Semua Dusun</option>
+                  {dusunList.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
+                  RW
+                </label>
+                <select
+                  value={filterRw}
+                  onChange={(e) => {
+                    setFilterRw(e.target.value);
+                    setFilterRt('all');
+                  }}
+                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
+                >
+                  <option value="all">Semua RW</option>
+                  {rwList.map((rw) => (
+                    <option key={rw} value={rw}>
+                      RW {rw}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
+                  RT
+                </label>
+                <select
+                  value={filterRt}
+                  onChange={(e) => setFilterRt(e.target.value)}
+                  className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
+                >
+                  <option value="all">Semua RT</option>
+                  {rtList.map((rt) => (
+                    <option key={rt} value={rt}>
+                      RT {rt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Baris 2: Filter Kepala Keluarga (SHDK) & No. KK */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+              {/* Filter Kepala Keluarga */}
+              <div>
+                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
+                  Status Hubungan Keluarga
+                </label>
+                <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setFilterShdk('all')}
+                    className={`py-1 text-[10.5px] font-bold rounded-lg transition-all ${
+                      filterShdk === 'all'
+                        ? 'bg-white text-slate-800 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Semua
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterShdk('Kepala Keluarga')}
+                    className={`py-1 text-[10.5px] font-bold rounded-lg transition-all ${
+                      filterShdk === 'Kepala Keluarga'
+                        ? 'bg-teal-700 text-white shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    👑 Kepala KK
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterShdk('Bukan Kepala Keluarga')}
+                    className={`py-1 text-[10.5px] font-bold rounded-lg transition-all ${
+                      filterShdk === 'Bukan Kepala Keluarga'
+                        ? 'bg-white text-slate-800 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Anggota
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Khusus No. KK */}
+              <div>
+                <label className="text-[9.5px] text-slate-400 font-bold block mb-1 uppercase">
+                  Filter No. Kartu Keluarga (KK)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={filterNoKk}
+                    onChange={(e) => setFilterNoKk(e.target.value)}
+                    placeholder="Ketik digit No. KK..."
+                    className="w-full py-1.5 pl-2.5 pr-7 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 outline-none focus:ring-1 focus:ring-teal-600"
+                  />
+                  {filterNoKk && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterNoKk('')}
+                      className="absolute right-2 top-1.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Active Filters Badges Indicator */}
+            {hasActiveFilter && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100 text-[10px]">
+                <span className="text-slate-400 font-bold">Filter Aktif:</span>
+                {filterDusun !== 'all' && (
+                  <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200">
+                    Dusun: {filterDusun}
+                    <button onClick={() => setFilterDusun('all')}>×</button>
+                  </span>
+                )}
+                {filterRw !== 'all' && (
+                  <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200">
+                    RW {filterRw}
+                    <button onClick={() => setFilterRw('all')}>×</button>
+                  </span>
+                )}
+                {filterRt !== 'all' && (
+                  <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200">
+                    RT {filterRt}
+                    <button onClick={() => setFilterRt('all')}>×</button>
+                  </span>
+                )}
+                {filterShdk !== 'all' && (
+                  <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200">
+                    {filterShdk === 'Kepala Keluarga' ? '👑 Kepala KK Saja' : 'Anggota Saja'}
+                    <button onClick={() => setFilterShdk('all')}>×</button>
+                  </span>
+                )}
+                {filterNoKk && (
+                  <span className="bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-teal-200 font-mono">
+                    KK: {filterNoKk}
+                    <button onClick={() => setFilterNoKk('')}>×</button>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Status Ekonomi Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
@@ -1335,6 +1653,17 @@ export default function WargaPage() {
           wargaToEdit={editingWarga}
           onClose={() => setEditingWarga(null)}
           onSuccess={handleWargaSuccess}
+        />
+      )}
+
+      {/* Modal Rekapitulasi & Unduh Data Kependudukan (Admin) */}
+      {showRekapModal && (
+        <RekapDownloadModal
+          isOpen={showRekapModal}
+          onClose={() => setShowRekapModal(false)}
+          allWarga={warga}
+          filteredWarga={filtered}
+          namaDesa={pengaturanDesa?.nama_desa || 'Sukamaju'}
         />
       )}
     </div>
