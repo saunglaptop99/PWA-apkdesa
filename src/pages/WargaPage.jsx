@@ -715,53 +715,56 @@ export default function WargaPage() {
   return (
     <div className="pb-28 max-w-4xl mx-auto animate-fade-in relative">
       {/* 1. STICKY HEADER: TERKUNCI TETAP DI ATAS SAAT SCROLLING KEBAWAH */}
-      <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md px-3 sm:px-4 pt-3 pb-2.5 border-b border-slate-200/80 shadow-xs space-y-2">
-        {/* Baris 1: Judul Halaman & Tombol Aksi */}
-        <div className="flex justify-between items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <div className="p-1.5 rounded-lg bg-teal-100 text-teal-800 flex-shrink-0">
-                <Users size={16} />
-              </div>
-              <h2 className="text-base sm:text-lg font-black text-slate-800 tracking-tight truncate">
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-3.5 pt-3 pb-2.5 border-b border-slate-200/90 shadow-xs space-y-2.5">
+        {/* Baris 1: Judul Halaman (Full Width, Tidak Terpotong) */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-teal-100 text-teal-800 flex-shrink-0 shadow-2xs">
+              <Users size={18} />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-black text-slate-800 tracking-tight whitespace-nowrap">
                 Data Kependudukan
               </h2>
+              <p className="text-[10.5px] text-slate-500 font-medium">
+                Wilayah Aktif:{' '}
+                <strong className="text-teal-700 font-bold uppercase">
+                  {profile?.role || 'ADMIN'}
+                </strong>
+                {profile?.wilayah_rt ? ` • RT ${profile.wilayah_rt}` : ''}
+                {profile?.wilayah_rw ? ` / RW ${profile.wilayah_rw}` : ''}
+                {profile?.wilayah_dusun ? ` • Dusun ${profile.wilayah_dusun}` : ''}
+              </p>
             </div>
-            <p className="text-[10.5px] text-slate-500 mt-0.5 truncate">
-              Wilayah Aktif: <strong className="text-teal-700 font-bold">{profile?.role?.toUpperCase()}</strong>
-              {profile?.wilayah_rt ? ` • RT ${profile.wilayah_rt}` : ''}
-              {profile?.wilayah_rw ? ` / RW ${profile.wilayah_rw}` : ''}
-              {profile?.wilayah_dusun ? ` • Dusun ${profile.wilayah_dusun}` : ''}
-            </p>
           </div>
-
-          {isAdmin && (
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowRekapModal(true)}
-                className="px-2.5 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 active:scale-95 shadow-2xs flex items-center gap-1.5 text-xs font-bold transition-all"
-                title="Rekapitulasi dan Unduh Data Kependudukan per RT/RW dan Dusun"
-              >
-                <FileSpreadsheet size={14} className="text-teal-700" />
-                <span className="hidden sm:inline">Rekap & Unduh</span>
-                <span className="sm:hidden">Rekap</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowAddModal(true)}
-                className="px-2.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white shadow-md shadow-teal-900/10 flex items-center gap-1 text-xs font-bold transition-all"
-                title="Tambah Warga Baru"
-              >
-                <UserPlus size={14} />
-                <span>Tambah</span>
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* Baris 2: Indikator Realtime Terhubung */}
+        {/* Baris 2: Tombol Aksi Admin Seimbang & Presisi (2 Tombol Lebar Penuh) */}
+        {isAdmin && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setShowRekapModal(true)}
+              className="py-2 px-3 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 active:scale-[0.98] shadow-2xs flex items-center justify-center gap-1.5 text-xs font-bold transition-all"
+              title="Rekapitulasi dan Unduh Data Kependudukan per RT/RW dan Dusun"
+            >
+              <FileSpreadsheet size={15} className="text-teal-700" />
+              <span>Rekap & Unduh</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="py-2 px-3 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white shadow-sm shadow-teal-900/10 flex items-center justify-center gap-1.5 text-xs font-bold transition-all"
+              title="Tambah Warga Baru"
+            >
+              <UserPlus size={15} />
+              <span>Tambah Warga</span>
+            </button>
+          </div>
+        )}
+
+        {/* Baris 3: Indikator Realtime Terhubung */}
         <div className="px-2.5 py-1.5 rounded-xl bg-teal-50/90 border border-teal-100 flex items-center justify-between text-[10px] text-teal-800">
           <div className="flex items-center gap-1.5 font-semibold truncate">
             <span className="relative flex h-2 w-2 flex-shrink-0">

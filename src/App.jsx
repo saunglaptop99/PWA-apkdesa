@@ -54,7 +54,7 @@ function MainLayout() {
         )}
 
         {/* Tab Pages (Tersusun Rapi dalam 4 Pilar Layanan) */}
-        <main className="flex-1 overflow-x-hidden">
+        <main className="flex-1 overflow-x-clip">
           {activeTab === 'dashboard' && (
             <DashboardPage
               setActiveTab={setActiveTab}
