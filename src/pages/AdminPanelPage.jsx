@@ -18,21 +18,28 @@ import {
   Lock,
   Eye,
   EyeOff,
-  UserCheck,
+  FolderTree,
+  ChevronRight,
+  Layers,
 } from 'lucide-react';
 
 export default function AdminPanelPage() {
-  const { aparatList, addAparat, updateAparat, deleteAparat, resetPinAparat, loginDemo } = useAuth();
+  const { aparatList, addAparat, updateAparat, deleteAparat, resetPinAparat } = useAuth();
   const {
     pengaturanDesa,
     updatePengaturanDesa,
+    wilayahList,
+    addWilayah,
+    updateDusun,
+    deleteDusun,
+    deleteWilayah,
     getDusunOptions,
     getRwOptions,
     getRtOptions,
     loading: desaLoading,
   } = useDesa();
 
-  const [activeTab, setActiveTab] = useState('aparat'); // 'aparat' | 'desa'
+  const [activeTab, setActiveTab] = useState('aparat'); // 'aparat' | 'wilayah' | 'desa'
 
   // Form Pengaturan Desa
   const [desaForm, setDesaForm] = useState({
@@ -49,7 +56,8 @@ export default function AdminPanelPage() {
   const [showAparatModal, setShowAparatModal] = useState(false);
   const [editingAparat, setEditingAparat] = useState(null);
 
-  const initialDusun = getDusunOptions()[0] || 'Sukamaju';
+  const dusunList = getDusunOptions();
+  const initialDusun = dusunList[0] || 'Sukamaju';
   const initialRw = getRwOptions(initialDusun)[0] || '01';
   const initialRt = getRtOptions(initialDusun, initialRw)[0] || '01';
 
@@ -67,7 +75,15 @@ export default function AdminPanelPage() {
 
   const [revealedPins, setRevealedPins] = useState({});
 
-  const dusunList = getDusunOptions();
+  // Modal Tambah Wilayah (Dusun / RW / RT)
+  const [showWilayahModal, setShowWilayahModal] = useState(false);
+  const [wilayahMode, setWilayahMode] = useState('dusun'); // 'dusun' | 'rw' | 'rt'
+  const [newWilayahForm, setNewWilayahForm] = useState({
+    dusun: '',
+    rw: '01',
+    rt: '01',
+  });
+
   const rwList = getRwOptions(aparatForm.wilayah_dusun);
   const rtList = getRtOptions(aparatForm.wilayah_dusun, aparatForm.wilayah_rw);
 
@@ -117,7 +133,6 @@ export default function AdminPanelPage() {
     setShowAparatModal(true);
   };
 
-  // Otomatis sinkronisasi jabatan & username saat wilayah/role diubah
   const handleRoleChange = (newRole) => {
     let newJabatan = aparatForm.jabatan;
     let newUsername = aparatForm.username;
@@ -261,6 +276,91 @@ export default function AdminPanelPage() {
     }
   };
 
+  // Modal Edit Dusun
+  const [showEditDusunModal, setShowEditDusunModal] = useState(false);
+  const [editingDusunData, setEditingDusunData] = useState({ oldName: '', newName: '' });
+
+  const openEditDusunModal = (dusunName) => {
+    setEditingDusunData({ oldName: dusunName, newName: dusunName });
+    setShowEditDusunModal(true);
+  };
+
+  const handleSaveEditDusun = async (e) => {
+    e.preventDefault();
+    if (!editingDusunData.newName.trim()) {
+      alert('Nama Dusun tidak boleh kosong.');
+      return;
+    }
+    await updateDusun(editingDusunData.oldName, editingDusunData.newName);
+    alert(`Nama Dusun berhasil diubah dari "${editingDusunData.oldName}" menjadi "${editingDusunData.newName.trim()}".`);
+    setShowEditDusunModal(false);
+  };
+
+  const handleDeleteDusun = async (dusunName) => {
+    if (confirm(`Yakin ingin menghapus seluruh Dusun "${dusunName}" beserta seluruh RW dan RT di dalamnya?`)) {
+      await deleteDusun(dusunName);
+    }
+  };
+
+  // Handler Tambah Wilayah Baru (Dusun / RW / RT)
+  const openAddWilayahModal = (mode, defaultDusun = '', defaultRw = '') => {
+    setWilayahMode(mode);
+    setNewWilayahForm({
+      dusun: defaultDusun || dusunList[0] || 'Sukamaju',
+      rw: defaultRw || '01',
+      rt: '01',
+    });
+    setShowWilayahModal(true);
+  };
+
+  const handleSaveWilayah = async (e) => {
+    e.preventDefault();
+    if (!newWilayahForm.dusun) {
+      alert('Nama Dusun wajib diisi.');
+      return;
+    }
+
+    const formattedRw = String(newWilayahForm.rw).padStart(2, '0');
+    const formattedRt = String(newWilayahForm.rt).padStart(2, '0');
+
+    await addWilayah(newWilayahForm.dusun, formattedRw, formattedRt);
+    alert(`Wilayah Dusun ${newWilayahForm.dusun} - RW ${formattedRw} / RT ${formattedRt} berhasil disimpan!`);
+
+    // Jika modal aparat sedang aktif, otomatis arahkan pilihan wilayah ke wilayah yang baru dibuat
+    if (showAparatModal) {
+      setAparatForm((prev) => ({
+        ...prev,
+        wilayah_dusun: newWilayahForm.dusun,
+        wilayah_rw: formattedRw,
+        wilayah_rt: formattedRt,
+      }));
+    }
+
+    setShowWilayahModal(false);
+  };
+
+  const handleDeleteWilayahItem = async (dusun, rw, rt) => {
+    if (confirm(`Hapus RT ${rt} / RW ${rw} di Dusun ${dusun}?`)) {
+      await deleteWilayah(dusun, rw, rt);
+    }
+  };
+
+  // Group wilayahList by Dusun -> RW -> RT
+  const groupedWilayah = {};
+  wilayahList.forEach((item) => {
+    if (!groupedWilayah[item.dusun]) {
+      groupedWilayah[item.dusun] = {};
+    }
+    const rwKey = String(item.rw).padStart(2, '0');
+    if (!groupedWilayah[item.dusun][rwKey]) {
+      groupedWilayah[item.dusun][rwKey] = [];
+    }
+    const rtVal = String(item.rt).padStart(2, '0');
+    if (!groupedWilayah[item.dusun][rwKey].includes(rtVal)) {
+      groupedWilayah[item.dusun][rwKey].push(rtVal);
+    }
+  });
+
   return (
     <div className="pb-28 pt-4 px-4 max-w-md mx-auto">
       {/* Header */}
@@ -272,37 +372,48 @@ export default function AdminPanelPage() {
           <h2 className="text-lg font-black text-slate-800 tracking-tight">Kelola Desa & Hak Akses</h2>
         </div>
         <p className="text-[11px] text-slate-500 mt-0.5">
-          Pengaturan identitas desa & manajemen login PIN aparat kewilayahan
+          Pengaturan identitas desa, struktur wilayah, & manajemen login PIN aparat
         </p>
       </div>
 
-      {/* Tab Navigasi */}
-      <div className="flex bg-slate-200/80 p-1 rounded-2xl mb-4 text-xs font-bold text-slate-600">
+      {/* Tab Navigasi 3 Pilihan */}
+      <div className="flex bg-slate-200/80 p-1 rounded-2xl mb-4 text-[11px] font-bold text-slate-600">
         <button
           onClick={() => setActiveTab('aparat')}
-          className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
             activeTab === 'aparat'
               ? 'bg-white text-teal-800 shadow-sm'
               : 'hover:text-slate-800'
           }`}
         >
-          <KeyRound size={14} />
-          <span>Aparat & PIN ({aparatList.length})</span>
+          <KeyRound size={13} />
+          <span>Aparat ({aparatList.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('wilayah')}
+          className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
+            activeTab === 'wilayah'
+              ? 'bg-white text-teal-800 shadow-sm'
+              : 'hover:text-slate-800'
+          }`}
+        >
+          <FolderTree size={13} />
+          <span>Wilayah (RT/RW)</span>
         </button>
         <button
           onClick={() => setActiveTab('desa')}
-          className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
             activeTab === 'desa'
               ? 'bg-white text-teal-800 shadow-sm'
               : 'hover:text-slate-800'
           }`}
         >
-          <Building2 size={14} />
+          <Building2 size={13} />
           <span>Profil Desa</span>
         </button>
       </div>
 
-      {/* TAB 1: MANAJEMEN APARAT & LOGIN PIN (GAMBAR 1) */}
+      {/* TAB 1: MANAJEMEN APARAT & LOGIN PIN */}
       {activeTab === 'aparat' && (
         <div className="space-y-3">
           <div className="flex justify-between items-center mb-1">
@@ -409,7 +520,121 @@ export default function AdminPanelPage() {
         </div>
       )}
 
-      {/* TAB 2: PENGATURAN IDENTITAS DESA & KEPALA DESA */}
+      {/* TAB 2: KELOLA WILAYAH (TAMBAH / EDIT DUSUN, RW, RT) */}
+      {activeTab === 'wilayah' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-xs font-bold text-slate-800">Struktur Wilayah Desa</h3>
+              <p className="text-[10px] text-slate-400">Master data Dusun, RW, dan RT untuk pilihan dropdown</p>
+            </div>
+            <button
+              onClick={() => openAddWilayahModal('dusun')}
+              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md shadow-teal-900/10 transition-all"
+            >
+              <Plus size={14} />
+              <span>Tambah Dusun</span>
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {Object.keys(groupedWilayah).map((dusunName) => {
+              const rwsInDusun = groupedWilayah[dusunName];
+              return (
+                <div
+                  key={dusunName}
+                  className="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-sm"
+                >
+                  <div className="flex justify-between items-center pb-2.5 border-b border-slate-100 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-xl bg-teal-50 text-teal-800">
+                        <MapPin size={16} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-extrabold text-slate-900 text-sm">Dusun {dusunName}</h4>
+                          <button
+                            type="button"
+                            onClick={() => openEditDusunModal(dusunName)}
+                            className="p-1 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-all"
+                            title="Ubah Nama Dusun"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDusun(dusunName)}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                            title="Hapus Dusun"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                        <span className="text-[10px] text-slate-400">
+                          {Object.keys(rwsInDusun).length} Rukun Warga (RW)
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => openAddWilayahModal('rw', dusunName)}
+                      className="px-2.5 py-1 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-[10.5px] font-bold flex items-center gap-1 transition-all"
+                    >
+                      <Plus size={12} />
+                      <span>Tambah RW</span>
+                    </button>
+                  </div>
+
+                  {/* List RW & RT di bawah Dusun */}
+                  <div className="space-y-3 pl-1">
+                    {Object.keys(rwsInDusun).map((rwNumber) => {
+                      const rtsInRw = rwsInDusun[rwNumber].sort();
+                      return (
+                        <div key={rwNumber} className="bg-slate-50/80 p-3 rounded-2xl border border-slate-200/70">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold text-slate-800 font-mono">
+                              RW {rwNumber}
+                            </span>
+                            <button
+                              onClick={() => openAddWilayahModal('rt', dusunName, rwNumber)}
+                              className="text-[10px] text-teal-700 hover:text-teal-900 font-bold flex items-center gap-0.5"
+                            >
+                              <Plus size={11} />
+                              <span>Tambah RT</span>
+                            </button>
+                          </div>
+
+                          {/* Chips List RT */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {rtsInRw.map((rtNumber) => (
+                              <div
+                                key={rtNumber}
+                                className="group inline-flex items-center gap-1 bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-xs font-mono font-bold text-slate-700 shadow-sm"
+                              >
+                                <span>RT {rtNumber}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteWilayahItem(dusunName, rwNumber, rtNumber)}
+                                  className="text-slate-300 hover:text-rose-600 transition-colors ml-0.5"
+                                  title="Hapus RT ini"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: PENGATURAN IDENTITAS DESA & KEPALA DESA */}
       {activeTab === 'desa' && (
         <div className="space-y-4">
           {saveSuccess && (
@@ -591,10 +816,21 @@ export default function AdminPanelPage() {
               {/* DROPDOWN WILAYAH DUSUN, RW, RT (TARIK DARI DATABASE) */}
               {aparatForm.role !== 'admin' ? (
                 <div className="p-3 bg-teal-50/70 rounded-2xl border border-teal-100 space-y-2">
-                  <span className="text-[10.5px] font-bold text-teal-800 flex items-center gap-1">
-                    <MapPin size={12} className="text-teal-600" />
-                    <span>Pilih Wilayah Kewenangan (Dropdown Database)</span>
-                  </span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10.5px] font-bold text-teal-800 flex items-center gap-1">
+                      <MapPin size={12} className="text-teal-600" />
+                      <span>Pilih Wilayah Kewenangan</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openAddWilayahModal('dusun')}
+                      className="text-[10px] font-bold text-teal-800 bg-teal-200/70 hover:bg-teal-200 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all"
+                      title="Tambah Dusun, RW, atau RT Baru ke Database"
+                    >
+                      <Plus size={11} />
+                      <span>+ Tambah Wilayah</span>
+                    </button>
+                  </div>
 
                   <div className="grid grid-cols-3 gap-2">
                     <div>
@@ -615,7 +851,7 @@ export default function AdminPanelPage() {
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 mb-0.5">RW</label>
                       {aparatForm.role === 'dusun' ? (
-                        <div className="p-2 rounded-xl bg-slate-100 text-slate-400 text-xs text-center">Semua</div>
+                        <div className="p-2 rounded-xl bg-slate-100 text-slate-400 text-xs text-center font-bold">Semua</div>
                       ) : (
                         <select
                           value={String(aparatForm.wilayah_rw).padStart(2, '0')}
@@ -646,7 +882,7 @@ export default function AdminPanelPage() {
                           ))}
                         </select>
                       ) : (
-                        <div className="p-2 rounded-xl bg-slate-100 text-slate-400 text-xs text-center">Semua</div>
+                        <div className="p-2 rounded-xl bg-slate-100 text-slate-400 text-xs text-center font-bold">Semua</div>
                       )}
                     </div>
                   </div>
@@ -683,6 +919,144 @@ export default function AdminPanelPage() {
                 className="w-full py-3 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-teal-900/15 transition-all mt-2"
               >
                 {editingAparat ? 'Simpan Perubahan' : 'Tambahkan Aparat Sekarang'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH WILAYAH BARU (DUSUN / RW / RT) */}
+      {showWilayahModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-teal-50 text-teal-700">
+                  <Plus size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm sm:text-base">
+                    {wilayahMode === 'dusun'
+                      ? 'Tambah Dusun Baru'
+                      : wilayahMode === 'rw'
+                      ? `Tambah RW Baru di Dusun ${newWilayahForm.dusun}`
+                      : `Tambah RT Baru di RW ${newWilayahForm.rw} (${newWilayahForm.dusun})`}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Tersinkronisasi otomatis ke seluruh dropdown</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowWilayahModal(false)}
+                className="p-1 rounded-full text-slate-400 hover:bg-slate-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveWilayah} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Nama Dusun *</label>
+                <input
+                  type="text"
+                  value={newWilayahForm.dusun}
+                  onChange={(e) => setNewWilayahForm({ ...newWilayahForm, dusun: e.target.value })}
+                  required
+                  placeholder="Contoh: Dusun Cempaka"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-teal-600 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Nomor RW *</label>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    value={newWilayahForm.rw}
+                    onChange={(e) => setNewWilayahForm({ ...newWilayahForm, rw: e.target.value })}
+                    required
+                    placeholder="01"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-center font-bold text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Nomor RT *</label>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    value={newWilayahForm.rt}
+                    onChange={(e) => setNewWilayahForm({ ...newWilayahForm, rt: e.target.value })}
+                    required
+                    placeholder="01"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-center font-bold text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-teal-900/15 transition-all mt-2"
+              >
+                Simpan Wilayah ke Database
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL UBAH / EDIT NAMA DUSUN */}
+      {showEditDusunModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-teal-50 text-teal-700">
+                  <Edit2 size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm sm:text-base">
+                    Ubah Nama Dusun
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Mengubah nama Dusun "{editingDusunData.oldName}"
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEditDusunModal(false)}
+                className="p-1 rounded-full text-slate-400 hover:bg-slate-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditDusun} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Nama Dusun Baru *
+                </label>
+                <input
+                  type="text"
+                  value={editingDusunData.newName}
+                  onChange={(e) =>
+                    setEditingDusunData({ ...editingDusunData, newName: e.target.value })
+                  }
+                  required
+                  placeholder="Contoh: Dusun Sukamaju Baru"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-teal-600 outline-none"
+                />
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 leading-relaxed">
+                Perubahan nama Dusun ini akan otomatis disinkronkan ke seluruh data RW, RT, data warga, dan hak login aparat terkait.
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-teal-900/15 transition-all mt-2"
+              >
+                Simpan Perubahan Nama Dusun
               </button>
             </form>
           </div>

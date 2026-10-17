@@ -117,7 +117,7 @@ export const DesaProvider = ({ children }) => {
     fetchPengaturan();
     fetchWilayah();
 
-    // Supabase Realtime Listener untuk sinkronisasi otomatis nama desa/kades
+    // Supabase Realtime Listener untuk sinkronisasi otomatis nama desa/kades & wilayah
     const channel = supabase
       .channel('realtime-desa-context')
       .on(
@@ -155,11 +155,13 @@ export const DesaProvider = ({ children }) => {
 
     const handleWilayahLocalSync = () => fetchWilayah();
     window.addEventListener('warga-updated', handleWilayahLocalSync);
+    window.addEventListener('wilayah-updated', handleWilayahLocalSync);
 
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('pengaturan-desa-updated', handleLocalSync);
       window.removeEventListener('warga-updated', handleWilayahLocalSync);
+      window.removeEventListener('wilayah-updated', handleWilayahLocalSync);
     };
   }, []);
 
@@ -182,6 +184,128 @@ export const DesaProvider = ({ children }) => {
       console.warn('Gagal update pengaturan desa:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // CRUD Tambah & Hapus Wilayah (Dusun, RW, RT) oleh Admin
+  const addWilayah = async (dusun, rw, rt) => {
+    const formattedDusun = dusun.trim();
+    const formattedRw = String(rw).padStart(2, '0');
+    const formattedRt = String(rt).padStart(2, '0');
+
+    const newItem = { dusun: formattedDusun, rw: formattedRw, rt: formattedRt };
+
+    // Update lokal
+    const exists = wilayahList.some(
+      (w) =>
+        w.dusun.toLowerCase() === formattedDusun.toLowerCase() &&
+        String(w.rw).padStart(2, '0') === formattedRw &&
+        String(w.rt).padStart(2, '0') === formattedRt
+    );
+
+    if (!exists) {
+      const updated = [...wilayahList, newItem];
+      setWilayahList(updated);
+      localStorage.setItem('cached_wilayah_desa', JSON.stringify(updated));
+      window.dispatchEvent(new Event('wilayah-updated'));
+    }
+
+    // Simpan ke Supabase
+    try {
+      await supabase.from('wilayah_desa').upsert(
+        [
+          {
+            dusun: formattedDusun,
+            rw: formattedRw,
+            rt: formattedRt,
+          },
+        ],
+        { onConflict: 'dusun,rw,rt' }
+      );
+    } catch (err) {
+      console.warn('Gagal simpan wilayah ke DB:', err);
+    }
+  };
+
+  const deleteWilayah = async (dusun, rw, rt) => {
+    const updated = wilayahList.filter(
+      (w) =>
+        !(
+          w.dusun.toLowerCase() === dusun.toLowerCase() &&
+          String(w.rw).padStart(2, '0') === String(rw).padStart(2, '0') &&
+          String(w.rt).padStart(2, '0') === String(rt).padStart(2, '0')
+        )
+    );
+
+    setWilayahList(updated);
+    localStorage.setItem('cached_wilayah_desa', JSON.stringify(updated));
+    window.dispatchEvent(new Event('wilayah-updated'));
+
+    try {
+      await supabase
+        .from('wilayah_desa')
+        .delete()
+        .eq('dusun', dusun)
+        .eq('rw', String(rw).padStart(2, '0'))
+        .eq('rt', String(rt).padStart(2, '0'));
+    } catch (err) {
+      console.warn('Gagal hapus wilayah di DB:', err);
+    }
+  };
+
+  const updateDusun = async (oldDusun, newDusun) => {
+    if (!oldDusun || !newDusun || oldDusun.trim().toLowerCase() === newDusun.trim().toLowerCase()) return;
+    const formattedNew = newDusun.trim();
+
+    // 1. Update local state
+    const updated = wilayahList.map((w) =>
+      w.dusun.toLowerCase() === oldDusun.trim().toLowerCase()
+        ? { ...w, dusun: formattedNew }
+        : w
+    );
+    setWilayahList(updated);
+    localStorage.setItem('cached_wilayah_desa', JSON.stringify(updated));
+    window.dispatchEvent(new Event('wilayah-updated'));
+
+    // 2. Update Supabase wilayah_desa
+    try {
+      await supabase
+        .from('wilayah_desa')
+        .update({ dusun: formattedNew })
+        .eq('dusun', oldDusun.trim());
+
+      // Update tabel warga yang terkait
+      await supabase
+        .from('warga')
+        .update({ dusun: formattedNew })
+        .eq('dusun', oldDusun.trim());
+
+      // Update profil aparat terkait
+      await supabase
+        .from('profiles')
+        .update({ wilayah_dusun: formattedNew })
+        .eq('wilayah_dusun', oldDusun.trim());
+    } catch (err) {
+      console.warn('Gagal update nama dusun di DB:', err);
+    }
+  };
+
+  const deleteDusun = async (dusunName) => {
+    if (!dusunName) return;
+    const updated = wilayahList.filter(
+      (w) => w.dusun.toLowerCase() !== dusunName.trim().toLowerCase()
+    );
+    setWilayahList(updated);
+    localStorage.setItem('cached_wilayah_desa', JSON.stringify(updated));
+    window.dispatchEvent(new Event('wilayah-updated'));
+
+    try {
+      await supabase
+        .from('wilayah_desa')
+        .delete()
+        .eq('dusun', dusunName.trim());
+    } catch (err) {
+      console.warn('Gagal hapus dusun di DB:', err);
     }
   };
 
@@ -229,6 +353,10 @@ export const DesaProvider = ({ children }) => {
         updatePengaturanDesa,
         fetchPengaturan,
         wilayahList,
+        addWilayah,
+        updateDusun,
+        deleteDusun,
+        deleteWilayah,
         getDusunOptions,
         getRwOptions,
         getRtOptions,
