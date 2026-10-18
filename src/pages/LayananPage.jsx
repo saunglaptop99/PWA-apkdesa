@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import BrandPageHeader from '../components/common/BrandPageHeader';
 import { useAuth } from '../context/AuthContext';
 import { useDesa } from '../context/DesaContext';
 import {
@@ -23,11 +24,29 @@ import {
 } from 'lucide-react';
 import BansosPage from './BansosPage';
 import MutasiPage from './MutasiPage';
-import SuratModal from '../components/surat/SuratModal';
+import SuratLayananPanel from '../components/surat/SuratLayananPanel';
 import { supabase } from '../lib/supabaseClient';
+import { readUserCache, writeUserCache, filterByProfileScope } from '../lib/userCache';
+import { fetchAllRows } from '../lib/fetchAllRows';
+
+const getAge = (birthDate) => {
+  if (!birthDate) return null;
+  const born = new Date(`${String(birthDate).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(born.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - born.getFullYear();
+  if (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate())) age -= 1;
+  return age >= 0 ? age : null;
+};
+const isBalita = (warga) => {
+  const age = getAge(warga.tanggal_lahir);
+  return age === null
+    ? ['Balita (0-5 Tahun)', 'Balita'].includes(warga.status_kesehatan_khusus)
+    : age <= 5;
+};
 
 export default function LayananPage({ defaultSubTab = 'bansos' }) {
-  const { profile } = useAuth();
+  const { profile, user, isOnline } = useAuth();
   const { pengaturanDesa } = useDesa();
 
   // Sub-tabs: 'bansos' | 'mutasi' | 'posyandu' | 'surat'
@@ -40,58 +59,62 @@ export default function LayananPage({ defaultSubTab = 'bansos' }) {
 
   // Surat Pengantar Quick Generator State
   const [wargaSuratList, setWargaSuratList] = useState([]);
-  const [suratSearch, setSuratSearch] = useState('');
-  const [selectedWargaSurat, setSelectedWargaSurat] = useState(null);
 
   useEffect(() => {
-    if (defaultSubTab) {
+    if (defaultSubTab === 'surat' && profile?.role !== 'admin') {
+      setActiveSubTab('bansos');
+    } else if (defaultSubTab) {
       setActiveSubTab(defaultSubTab);
     }
-  }, [defaultSubTab]);
+  }, [defaultSubTab, profile?.role]);
 
   // Load Warga untuk Posyandu & Surat
   useEffect(() => {
     const fetchWargaData = async () => {
       setLoadingPosyandu(true);
       try {
-        let query = supabase.from('warga').select('*').eq('status_kependudukan', 'aktif');
+        const { data, error } = await fetchAllRows(() => {
+          let query = supabase.from('warga').select('*').eq('status_kependudukan', 'aktif');
 
-        if (profile?.role === 'rt') {
-          if (profile.wilayah_rt) query = query.eq('rt', profile.wilayah_rt);
-          if (profile.wilayah_rw) query = query.eq('rw', profile.wilayah_rw);
-        } else if (profile?.role === 'rw') {
-          if (profile.wilayah_rw) query = query.eq('rw', profile.wilayah_rw);
-        } else if (profile?.role === 'dusun') {
-          if (profile.wilayah_dusun) query = query.eq('dusun', profile.wilayah_dusun);
-        }
+          if (profile?.role === 'rt') {
+            if (profile.wilayah_dusun) query = query.eq('dusun', profile.wilayah_dusun);
+            if (profile.wilayah_rt) query = query.eq('rt', profile.wilayah_rt);
+            if (profile.wilayah_rw) query = query.eq('rw', profile.wilayah_rw);
+          } else if (profile?.role === 'rw') {
+            if (profile.wilayah_dusun) query = query.eq('dusun', profile.wilayah_dusun);
+            if (profile.wilayah_rw) query = query.eq('rw', profile.wilayah_rw);
+          } else if (profile?.role === 'dusun') {
+            if (profile.wilayah_dusun) query = query.eq('dusun', profile.wilayah_dusun);
+          }
 
-        const { data, error } = await query;
-        if (!error && data && data.length > 0) {
-          setWargaPosyandu(data);
-          setWargaSuratList(data);
-        } else {
-          const cached = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
-          setWargaPosyandu(cached);
-          setWargaSuratList(cached);
-        }
+          return query.order('nama', { ascending: true }).order('id', { ascending: true });
+        });
+        if (error) throw error;
+        const scoped = filterByProfileScope(data || [], profile);
+        setWargaPosyandu(scoped);
+        setWargaSuratList(scoped);
+        writeUserCache(user?.id, 'layanan-warga', scoped);
       } catch (err) {
         console.warn('Gagal fetch data layanan:', err);
+        const cached = filterByProfileScope(readUserCache(user?.id, 'layanan-warga', []), profile);
+        setWargaPosyandu(cached);
+        setWargaSuratList(cached);
       } finally {
         setLoadingPosyandu(false);
       }
     };
 
     fetchWargaData();
-  }, [profile]);
+    const channel = supabase
+      .channel(`layanan-warga-${user?.id || 'none'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warga' }, fetchWargaData)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [profile, user?.id, isOnline]);
 
   // Statistik Posyandu & Stunting
   const statsPosyandu = {
-    totalBalita: wargaPosyandu.filter(
-      (w) =>
-        w.status_kesehatan_khusus === 'Balita (0-5 Tahun)' ||
-        w.status_kesehatan_khusus === 'Balita' ||
-        (w.tanggal_lahir && new Date().getFullYear() - new Date(w.tanggal_lahir).getFullYear() <= 5)
-    ).length,
+    totalBalita: wargaPosyandu.filter(isBalita).length,
     totalHamil: wargaPosyandu.filter((w) => w.status_kesehatan_khusus === 'Ibu Hamil').length,
     totalMenyusui: wargaPosyandu.filter((w) => w.status_kesehatan_khusus === 'Ibu Menyusui').length,
     totalDisabilitas: wargaPosyandu.filter(
@@ -105,11 +128,7 @@ export default function LayananPage({ defaultSubTab = 'bansos' }) {
   // Filter List Posyandu
   const filteredPosyandu = wargaPosyandu.filter((w) => {
     if (posyanduFilter === 'balita') {
-      return (
-        w.status_kesehatan_khusus === 'Balita (0-5 Tahun)' ||
-        w.status_kesehatan_khusus === 'Balita' ||
-        (w.tanggal_lahir && new Date().getFullYear() - new Date(w.tanggal_lahir).getFullYear() <= 5)
-      );
+      return isBalita(w);
     }
     if (posyanduFilter === 'hamil') {
       return w.status_kesehatan_khusus === 'Ibu Hamil';
@@ -132,34 +151,14 @@ export default function LayananPage({ defaultSubTab = 'bansos' }) {
       w.is_disabilitas ||
       (w.jenis_disabilitas && w.jenis_disabilitas !== 'Tidak Ada') ||
       (w.penyakit_kronis && w.penyakit_kronis !== 'Tidak Ada' && w.penyakit_kronis !== '-') ||
-      (w.tanggal_lahir && new Date().getFullYear() - new Date(w.tanggal_lahir).getFullYear() <= 5)
-    );
-  });
-
-  // Filter List Surat Pengantar
-  const filteredSuratWarga = wargaSuratList.filter((w) => {
-    const q = suratSearch.toLowerCase();
-    return (
-      w.nama?.toLowerCase().includes(q) ||
-      w.nik?.includes(q) ||
-      w.no_kk?.includes(q)
+      isBalita(w)
     );
   });
 
   return (
-    <div className="pb-28 pt-4 px-3 sm:px-4 max-w-4xl mx-auto animate-fade-in">
+    <div className="app-page pb-28 pt-4 px-3 sm:px-4 max-w-4xl mx-auto animate-fade-in">
       {/* Header Hub Layanan Desa */}
-      <div className="mb-3">
-        <div className="flex items-center gap-1.5">
-          <div className="p-1.5 rounded-lg bg-teal-100 text-teal-800">
-            <HeartPulse size={16} />
-          </div>
-          <h2 className="text-lg font-black text-slate-800 tracking-tight">Layanan Terpadu Desa</h2>
-        </div>
-        <p className="text-[11px] text-slate-500 mt-0.5">
-          Pusat layanan kependudukan, bansos, mutasi, surat pengantar & posyandu terintegrasi
-        </p>
-      </div>
+      <BrandPageHeader title="Layanan Terpadu Desa" subtitle="Pusat layanan kependudukan, bansos, mutasi, surat pengantar & posyandu" className="layanan-topbar" />
 
       {/* Navigasi Sub-Tab Horizontal (4 Layanan Utama) */}
       <div className="flex bg-slate-200/80 p-1 rounded-2xl mb-4 text-[11px] font-bold text-slate-600 gap-1 overflow-x-auto no-scrollbar">
@@ -199,7 +198,7 @@ export default function LayananPage({ defaultSubTab = 'bansos' }) {
           <span>Posyandu & Stunting</span>
         </button>
 
-        <button
+        {profile?.role === 'admin' && <button
           onClick={() => setActiveSubTab('surat')}
           className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl flex items-center justify-center gap-1 transition-all whitespace-nowrap ${
             activeSubTab === 'surat'
@@ -209,7 +208,7 @@ export default function LayananPage({ defaultSubTab = 'bansos' }) {
         >
           <FileText size={13} />
           <span>Surat PDF</span>
-        </button>
+        </button>}
       </div>
 
       {/* KONTEN SUB-TAB 1: BANTUAN SOSIAL */}
@@ -357,87 +356,8 @@ export default function LayananPage({ defaultSubTab = 'bansos' }) {
       )}
 
       {/* KONTEN SUB-TAB 4: GENERATOR SURAT PENGANTAR PDF RESMI */}
-      {activeSubTab === 'surat' && (
-        <div className="space-y-3.5 animate-fade-in">
-          {/* Header Info */}
-          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-teal-50 via-emerald-50 to-cyan-50 border border-teal-100">
-            <div className="flex items-center gap-2 mb-1">
-              <FileText size={18} className="text-teal-700" />
-              <h3 className="font-extrabold text-slate-800 text-sm">
-                Pembuatan Surat Pengantar Resmi Desa (PDF)
-              </h3>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Pilih warga pemohon untuk langsung mencetak Surat Pengantar resmi lengkap dengan Kop Surat Desa {pengaturanDesa?.nama_desa}, nomor surat otomatis, dan tanda tangan Kepala Desa {pengaturanDesa?.nama_kepala_desa}.
-            </p>
-          </div>
-
-          {/* Pencarian Warga Pemohon */}
-          <div className="relative">
-            <Search className="absolute left-3.5 top-3 text-slate-400" size={16} />
-            <input
-              type="text"
-              value={suratSearch}
-              onChange={(e) => setSuratSearch(e.target.value)}
-              placeholder="Ketik NIK, No. KK, atau Nama Warga pemohon..."
-              className="w-full pl-9 pr-8 py-2.5 bg-white rounded-2xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none shadow-sm"
-            />
-            {suratSearch && (
-              <button
-                onClick={() => setSuratSearch('')}
-                className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
-              >
-                ×
-              </button>
-            )}
-          </div>
-
-          {/* Daftar Warga Siap Cetak Surat */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-            <div className="p-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center text-xs">
-              <span className="font-bold text-slate-700">Pilih Warga Pemohon Surat:</span>
-              <span className="text-slate-400 text-[11px] font-medium">{filteredSuratWarga.length} warga ditemukan</span>
-            </div>
-
-            <div className="divide-y divide-slate-100 text-xs max-h-[380px] overflow-y-auto">
-              {filteredSuratWarga.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-3 hover:bg-teal-50/50 transition-colors flex items-center justify-between gap-2"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">
-                      {item.nama}
-                    </div>
-                    <div className="text-[10.5px] font-mono text-slate-500 mt-0.5">
-                      NIK: {item.nik} • KK: {item.no_kk}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      RT {item.rt} / RW {item.rw} • Dusun {item.dusun}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => setSelectedWargaSurat(item)}
-                    className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-teal-900/10 transition-all flex-shrink-0"
-                  >
-                    <Printer size={13} />
-                    <span>Cetak Surat</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Cetak Surat Pengantar PDF */}
-      {selectedWargaSurat && (
-        <SuratModal
-          warga={selectedWargaSurat}
-          userProfile={profile}
-          onClose={() => setSelectedWargaSurat(null)}
-        />
+      {activeSubTab === 'surat' && profile?.role === 'admin' && (
+        <SuratLayananPanel wargaList={wargaSuratList} user={user} profile={profile} />
       )}
     </div>
   );

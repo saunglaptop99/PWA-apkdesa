@@ -16,6 +16,30 @@ import {
 } from 'lucide-react';
 import { normalizeWilayah } from '../../pages/WargaPage';
 
+const calculateAge = (birthDate) => {
+  if (!birthDate) return null;
+  const born = new Date(`${String(birthDate).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(born.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - born.getFullYear();
+  if (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate())) age -= 1;
+  return age >= 0 ? age : null;
+};
+const isBalita = (warga) => {
+  const age = calculateAge(warga.tanggal_lahir);
+  return age === null
+    ? ['Balita', 'Balita (0-5 Tahun)', 'Balita (0-59 bulan)'].includes(warga.status_kesehatan_khusus || warga.status_khusus)
+    : age <= 5;
+};
+const isLansia = (warga) => {
+  const age = calculateAge(warga.tanggal_lahir);
+  return age === null
+    ? ['Lansia', 'Lansia Risti'].includes(warga.status_kesehatan_khusus || warga.status_khusus)
+    : age >= 60;
+};
+const hasBansos = (warga) => Boolean(warga.bansos_pkh || warga.bansos_bpnt || warga.bansos_blt_desa || warga.bpjs_pbi);
+const hasDisability = (warga) => Boolean(warga.is_disabilitas || (warga.jenis_disabilitas && warga.jenis_disabilitas !== 'Tidak Ada'));
+
 // Helper format row data untuk ekspor Excel lengkap
 const formatWargaRow = (w, index) => ({
   No: index + 1,
@@ -29,6 +53,7 @@ const formatWargaRow = (w, index) => ({
   Golongan_Darah: w.golongan_darah || '-',
   Agama: w.agama || 'Islam',
   Status_Perkawinan: w.status_perkawinan || 'Belum Kawin',
+  No_Akta_Nikah_Cerai: w.no_akta_nikah_cerai || '',
   No_Akta_Lahir: w.no_akta_lahir || '-',
   Status_KTP: w.status_ktp || 'Sudah KTP-el',
   Nama_Ayah: w.nama_ayah || '-',
@@ -40,7 +65,7 @@ const formatWargaRow = (w, index) => ({
   Ekonomi: w.status_ekonomi || 'mampu',
   Bansos_PKH: w.bansos_pkh === 'Ya' || w.bansos_pkh === true ? 'Penerima' : 'Tidak',
   Bansos_BPNT: w.bansos_bpnt === 'Ya' || w.bansos_bpnt === true ? 'Penerima' : 'Tidak',
-  Bansos_BLT_Desa: w.bansos_blt === 'Ya' || w.bansos_blt_desa === true ? 'Penerima' : 'Tidak',
+  Bansos_BLT_Desa: w.bansos_blt_desa === true ? 'Penerima' : 'Tidak',
   BPJS_PBI: w.bansos_bpjs_pbi === 'Ya' || w.bpjs_pbi === true ? 'Penerima' : 'Tidak',
   Dusun: w.dusun || '-',
   RW: String(w.rw || '-').padStart(2, '0'),
@@ -50,7 +75,7 @@ const formatWargaRow = (w, index) => ({
   Status_Domisili: w.status_domisili || 'Penduduk Tetap',
   No_Telepon_WA: w.no_telepon || w.no_hp || w.telepon || '-',
   Status_Khusus_Posyandu: w.status_khusus || w.status_kesehatan_khusus || 'Normal',
-  Disabilitas: w.disabilitas || w.jenis_disabilitas || 'Tidak Ada',
+  Disabilitas: hasDisability(w) ? (w.jenis_disabilitas || 'Ya') : 'Tidak Ada',
   Penyakit_Kronis: w.penyakit_kronis || 'Tidak Ada',
   Status_Kependudukan: w.status_kependudukan || 'aktif',
 });
@@ -101,17 +126,10 @@ export default function RekapDownloadModal({
       if (w.jenis_kelamin === 'Laki-laki') map[d].lakiLaki++;
       else if (w.jenis_kelamin === 'Perempuan') map[d].perempuan++;
 
-      if (w.status_khusus === 'Balita (0-59 bulan)') map[d].balita++;
-      if (w.status_khusus === 'Lansia') map[d].lansia++;
-      if (
-        w.status_ekonomi === 'miskin' ||
-        w.bansos_pkh === 'Ya' ||
-        w.bansos_bpnt === 'Ya' ||
-        w.bansos_blt === 'Ya'
-      ) {
-        map[d].bansos++;
-      }
-      if (w.disabilitas && w.disabilitas !== 'Tidak Ada') map[d].disabilitas++;
+      if (isBalita(w)) map[d].balita++;
+      if (isLansia(w)) map[d].lansia++;
+      if (hasBansos(w)) map[d].bansos++;
+      if (hasDisability(w)) map[d].disabilitas++;
     });
 
     return Object.values(map).sort((a, b) => a.dusun.localeCompare(b.dusun));
@@ -150,15 +168,8 @@ export default function RekapDownloadModal({
       if (w.shdk === 'Kepala Keluarga') map[key].kepalaKeluarga++;
       if (w.jenis_kelamin === 'Laki-laki') map[key].lakiLaki++;
       else if (w.jenis_kelamin === 'Perempuan') map[key].perempuan++;
-      if (
-        w.status_ekonomi === 'miskin' ||
-        w.bansos_pkh === 'Ya' ||
-        w.bansos_bpnt === 'Ya' ||
-        w.bansos_blt === 'Ya'
-      ) {
-        map[key].bansos++;
-      }
-      if (w.status_khusus === 'Balita (0-59 bulan)') map[key].balita++;
+      if (hasBansos(w)) map[key].bansos++;
+      if (isBalita(w)) map[key].balita++;
     });
 
     return Object.values(map).sort((a, b) => {
@@ -181,16 +192,8 @@ export default function RekapDownloadModal({
     const totalJiwa = allWarga.length;
     const kkSet = new Set(allWarga.map((w) => w.no_kk).filter(Boolean));
     const totalKK = kkSet.size;
-    const totalBansos = allWarga.filter(
-      (w) =>
-        w.status_ekonomi === 'miskin' ||
-        w.bansos_pkh === 'Ya' ||
-        w.bansos_bpnt === 'Ya' ||
-        w.bansos_blt === 'Ya'
-    ).length;
-    const totalBalita = allWarga.filter(
-      (w) => w.status_khusus === 'Balita (0-59 bulan)'
-    ).length;
+    const totalBansos = allWarga.filter(hasBansos).length;
+    const totalBalita = allWarga.filter(isBalita).length;
     return { totalJiwa, totalKK, totalBansos, totalBalita };
   }, [allWarga]);
 

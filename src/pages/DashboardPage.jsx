@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useDesa } from '../context/DesaContext';
-import { normalizeWilayah } from './WargaPage';
+import { readUserCache, writeUserCache, filterByProfileScope } from '../lib/userCache';
+import BrandPageHeader from '../components/common/BrandPageHeader';
 import {
   Users,
   AlertTriangle,
@@ -12,17 +13,14 @@ import {
   TrendingUp,
   MapPin,
   Calendar,
-  Sparkles,
   Settings,
   Bell,
-  Building2,
   Baby,
   Gift,
-  HeartPulse,
 } from 'lucide-react';
 
 export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
-  const { profile, isOnline } = useAuth();
+  const { profile, user, isOnline } = useAuth();
   const { pengaturanDesa } = useDesa();
 
   const [stats, setStats] = useState({
@@ -33,77 +31,74 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
     totalKK: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [statsSource, setStatsSource] = useState('loading');
+
+  const setCachedStats = () => {
+    const cachedWarga = filterByProfileScope(readUserCache(user?.id, 'dashboard-warga', []), profile)
+      .filter((w) => w.status_kependudukan === 'aktif');
+    const cachedRecipients = readUserCache(user?.id, 'bansos-penerima', [])
+      .filter((row) => filterByProfileScope([row.warga].filter(Boolean), profile).length > 0);
+    setStats({
+      totalWarga: cachedWarga.length,
+      wargaMiskin: cachedWarga.filter((w) => w.status_ekonomi === 'miskin').length,
+      wargaRentan: cachedWarga.filter((w) => w.status_ekonomi === 'rentan').length,
+      penerimaBansos: cachedRecipients.length,
+      totalKK: new Set(cachedWarga.map((w) => w.no_kk).filter(Boolean)).size,
+    });
+  };
 
   const loadStats = async () => {
     setLoading(true);
     try {
-      let wargaQuery = supabase.from('warga').select('*').eq('status_kependudukan', 'aktif');
+      let wargaQuery = supabase
+        .from('warga')
+        .select('id, no_kk, status_ekonomi, dusun, rw, rt, status_kependudukan')
+        .eq('status_kependudukan', 'aktif');
 
       // Terapkan isolasi wilayah
       if (profile?.role === 'rt') {
+        if (profile.wilayah_dusun) wargaQuery = wargaQuery.eq('dusun', profile.wilayah_dusun);
         if (profile.wilayah_rt) wargaQuery = wargaQuery.eq('rt', profile.wilayah_rt);
         if (profile.wilayah_rw) wargaQuery = wargaQuery.eq('rw', profile.wilayah_rw);
       } else if (profile?.role === 'rw') {
+        if (profile.wilayah_dusun) wargaQuery = wargaQuery.eq('dusun', profile.wilayah_dusun);
         if (profile.wilayah_rw) wargaQuery = wargaQuery.eq('rw', profile.wilayah_rw);
       } else if (profile?.role === 'dusun') {
         if (profile.wilayah_dusun) wargaQuery = wargaQuery.eq('dusun', profile.wilayah_dusun);
       }
 
-      const { data: wargaData } = await wargaQuery;
-
-      if (wargaData && wargaData.length > 0) {
-        const total = wargaData.length;
-        const miskin = wargaData.filter((w) => w.status_ekonomi === 'miskin').length;
-        const rentan = wargaData.filter((w) => w.status_ekonomi === 'rentan').length;
-        const uniqueKK = new Set(wargaData.map((w) => w.no_kk)).size;
-
-        const { count: bansosCount } = await supabase
-          .from('penerima_bansos')
-          .select('*', { count: 'exact', head: true });
-
-        setStats({
-          totalWarga: total,
-          wargaMiskin: miskin,
-          wargaRentan: rentan,
-          penerimaBansos: bansosCount || 2,
-          totalKK: uniqueKK,
-        });
-      } else {
-        // Fallback ke local cache dengan isolasi wilayah ketat
-        const cached = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
-        let filtered = cached.filter((w) => w.status_kependudukan === 'aktif');
-
-        if (profile?.role === 'rt') {
-          filtered = filtered.filter(
-            (w) =>
-              normalizeWilayah(w.rt) === normalizeWilayah(profile.wilayah_rt) &&
-              normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
-          );
-        } else if (profile?.role === 'rw') {
-          filtered = filtered.filter(
-            (w) => normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
-          );
-        } else if (profile?.role === 'dusun') {
-          filtered = filtered.filter(
-            (w) => w.dusun?.trim().toLowerCase() === profile.wilayah_dusun?.trim().toLowerCase()
-          );
-        }
-
-        const total = filtered.length || 0;
-        const miskin = filtered.filter((w) => w.status_ekonomi === 'miskin').length || 0;
-        const rentan = filtered.filter((w) => w.status_ekonomi === 'rentan').length || 0;
-        const uniqueKK = new Set(filtered.map((w) => w.no_kk)).size || 0;
-
-        setStats({
-          totalWarga: total,
-          wargaMiskin: miskin,
-          wargaRentan: rentan,
-          penerimaBansos: 2,
-          totalKK: uniqueKK,
-        });
+      wargaQuery = wargaQuery.order('id', { ascending: true });
+      const wargaData = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data: batch, error } = await wargaQuery.range(offset, offset + 999);
+        if (error) throw error;
+        wargaData.push(...(batch || []));
+        if (!batch || batch.length < 1000) break;
       }
+      const scopedWarga = filterByProfileScope(wargaData, profile);
+      writeUserCache(user?.id, 'dashboard-warga', scopedWarga);
+      const total = scopedWarga.length;
+      const miskin = scopedWarga.filter((w) => w.status_ekonomi === 'miskin').length;
+      const rentan = scopedWarga.filter((w) => w.status_ekonomi === 'rentan').length;
+      const uniqueKK = new Set(scopedWarga.map((w) => w.no_kk).filter(Boolean)).size;
+
+      const { count: bansosCount, error: bansosError } = await supabase
+        .from('penerima_bansos')
+        .select('*', { count: 'exact', head: true });
+      if (bansosError) throw bansosError;
+
+      setStats({
+        totalWarga: total,
+        wargaMiskin: miskin,
+        wargaRentan: rentan,
+        penerimaBansos: bansosCount || 0,
+        totalKK: uniqueKK,
+      });
+      setStatsSource('database');
     } catch (err) {
       console.warn('Dashboard stats error:', err);
+      setCachedStats();
+      setStatsSource('cache');
     } finally {
       setLoading(false);
     }
@@ -120,16 +115,19 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
         { event: '*', schema: 'public', table: 'warga' },
         () => loadStats()
       )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'penerima_bansos' }, () => loadStats())
       .subscribe();
 
     const handleLocalSync = () => loadStats();
     window.addEventListener('warga-updated', handleLocalSync);
+    window.addEventListener('bansos-updated', handleLocalSync);
 
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('warga-updated', handleLocalSync);
+      window.removeEventListener('bansos-updated', handleLocalSync);
     };
-  }, [profile]);
+  }, [profile, user?.id, isOnline]);
 
   const roleTitle =
     profile?.role === 'admin'
@@ -143,76 +141,35 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
   const miskinPercentage = stats.totalWarga
     ? Math.round((stats.wargaMiskin / stats.totalWarga) * 100)
     : 0;
+  const greeting = new Date().getHours() < 11 ? 'Selamat pagi' : new Date().getHours() < 15 ? 'Selamat siang' : new Date().getHours() < 18 ? 'Selamat sore' : 'Selamat malam';
+  const namaDesa = pengaturanDesa?.nama_desa?.trim();
 
   return (
-    <div className="pb-28 pt-4 px-4 max-w-md mx-auto">
+    <div className="app-page dashboard-page pb-28 pt-4 px-4 max-w-md mx-auto">
       {/* Top Bar Status */}
-      <div className="flex items-center justify-between mb-3 px-1">
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-          <Calendar size={13} className="text-teal-600" />
-          <span>
-            {new Date().toLocaleDateString('id-ID', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </span>
+      <BrandPageHeader
+        className="dashboard-topbar"
+        title={namaDesa ? `SIM DESA ${namaDesa}` : 'SIM DESA'}
+        subtitle={<span className="flex items-center gap-1.5"><Calendar size={12} />{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>}
+        trailing={<span className={`status-label ${isOnline ? 'is-online' : 'is-offline'}`}>{isOnline ? 'Online' : 'Offline'}</span>}
+      />
+
+      {/* Ringkasan identitas aparat dan wilayah */}
+      <section className="dashboard-welcome dashboard-hero mb-4">
+        <div className="hero-kicker"><span className="hero-live-dot" />{greeting}</div>
+        <h1>{profile?.nama_lengkap || 'Aparat Desa'}</h1>
+        <div className="hero-role">{roleTitle}</div>
+        <div className="hero-divider" />
+        <div className="hero-bottom">
+          <div className="hero-location"><MapPin size={14} /><span>{profile?.wilayah_rt ? `RT ${profile.wilayah_rt} / ` : ''}{profile?.wilayah_rw ? `RW ${profile.wilayah_rw} · ` : ''}{profile?.wilayah_dusun ? `Dusun ${profile.wilayah_dusun}` : 'Seluruh desa'}</span></div>
+          {pengaturanDesa?.nama_kepala_desa && <p className="hero-head-village">Kades · {pengaturanDesa.nama_kepala_desa}</p>}
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-              isOnline ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-            }`}
-          >
-            {isOnline ? '● Online' : '○ Offline Cache'}
-          </span>
-        </div>
-      </div>
-
-      {/* Hero Welcome Banner (Dinamis dengan Nama Desa & Kades) */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-teal-800 via-teal-700 to-emerald-900 rounded-3xl p-5 text-white shadow-xl shadow-teal-950/15 mb-4">
-        <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
-        <div className="absolute right-4 top-4 text-emerald-300/20">
-          <Sparkles size={54} />
-        </div>
-
-        <div className="relative z-10">
-          <div className="inline-flex items-center gap-1.5 text-[10.5px] tracking-wider uppercase font-extrabold bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">
-            <span>Peran: {profile?.role?.toUpperCase()}</span>
-          </div>
-
-          <h2 className="text-lg font-black mt-2 text-white tracking-tight">
-            Halo, {profile?.nama_lengkap || 'Aparat Desa'}
-          </h2>
-
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-teal-100">
-            <Building2 size={13} className="text-emerald-300 flex-shrink-0" />
-            <span>
-              Pemerintah Desa {pengaturanDesa?.nama_desa || 'Sukamaju'} (Kades: {pengaturanDesa?.nama_kepala_desa})
-            </span>
-          </div>
-
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-teal-100">
-            <MapPin size={13} className="text-emerald-300 flex-shrink-0" />
-            <span>
-              {profile?.wilayah_rt ? `RT ${profile.wilayah_rt} ` : ''}
-              {profile?.wilayah_rw ? `/ RW ${profile.wilayah_rw} ` : ''}
-              {profile?.wilayah_dusun
-                ? `• Dusun ${profile.wilayah_dusun}`
-                : 'Kewenangan: Seluruh Desa'}
-            </span>
-          </div>
-
-          <div className="mt-3.5 pt-3 border-t border-white/15 flex items-center justify-between text-[11px] text-teal-100">
-            <span>Sistem Informasi Desa PWA</span>
-            <span className="font-semibold text-emerald-300">{roleTitle}</span>
-          </div>
-        </div>
-      </div>
+      </section>
 
       {/* Statistik Grid 4 Cards */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <section className="dashboard-section dashboard-panel mb-3">
+        <div className="section-heading"><h2>Ringkasan wilayah</h2><span>{loading ? 'Memuat…' : statsSource === 'database' ? 'Data terkini' : 'Cache terakhir'}</span></div>
+      <div className="grid grid-cols-2 gap-2 mb-0 dashboard-stats">
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-slate-500">Total Warga</span>
@@ -274,12 +231,13 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
           <div className="text-2xl font-black text-emerald-700 tracking-tight">
             {stats.penerimaBansos}
           </div>
-          <span className="text-[10px] text-slate-400 block mt-1">Penerima aktif 2026</span>
+          <span className="text-[10px] text-slate-400 block mt-1">Penerima terdaftar</span>
         </div>
       </div>
+      </section>
 
       {/* Progress Distribusi Ekonomi */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm mb-4">
+      <div className="dashboard-panel mb-3">
         <div className="flex justify-between items-center mb-2">
           <h3 className="text-xs font-bold text-slate-800">Distribusi Ekonomi Wilayah</h3>
           <span className="text-[10px] font-bold text-rose-600">{miskinPercentage}% Prasejahtera</span>
@@ -322,12 +280,12 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
       </div>
 
       {/* Shortcut Menu (Akses Cepat Layanan) */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm mb-4">
+      <div className="dashboard-panel dashboard-services mb-3">
         <h3 className="font-bold text-slate-800 text-xs mb-3 flex items-center justify-between">
           <span>Layanan Terpadu Aparat</span>
           <span className="text-[10px] font-normal text-slate-400">1-Klik Akses</span>
         </h3>
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="grid grid-cols-2 gap-2 text-left dashboard-shortcuts">
           <button
             type="button"
             onClick={() => setActiveTab('warga')}
@@ -376,7 +334,7 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
             <span className="text-[9px] text-slate-400">Ibu & Stunting</span>
           </button>
 
-          <button
+          {profile?.role === 'admin' && <button
             type="button"
             onClick={() => (navigateToLayanan ? navigateToLayanan('surat') : setActiveTab('layanan'))}
             className="p-2.5 rounded-2xl bg-cyan-50/70 hover:bg-cyan-100 active:scale-95 flex flex-col items-center justify-center transition-all group"
@@ -386,7 +344,7 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
             </div>
             <span className="text-[10.5px] font-bold text-slate-700">Surat PDF</span>
             <span className="text-[9px] text-slate-400">Pengantar Resmi</span>
-          </button>
+          </button>}
 
           {profile?.role === 'admin' ? (
             <button
@@ -410,20 +368,20 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
                 <ShieldCheck size={18} />
               </div>
               <span className="text-[10.5px] font-bold text-slate-700">Akun Aparat</span>
-              <span className="text-[9px] text-slate-400">Profil & PIN</span>
+              <span className="text-[9px] text-slate-400">Profil Aparat</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Pengumuman Aparat Desa */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-4 shadow-sm">
-        <div className="flex items-center gap-2 text-amber-800 font-bold text-xs mb-1">
+      {/* Status sinkronisasi ringkasan */}
+      <div className="dashboard-panel dashboard-sync-panel">
+        <div className="flex items-center gap-2 text-slate-800 font-bold text-xs mb-1">
           <Bell size={15} />
-          <span>Agenda & Pengumuman Desa {pengaturanDesa?.nama_desa}</span>
+          <span>Informasi dashboard</span>
         </div>
-        <p className="text-[11px] text-amber-900 leading-relaxed">
-          Penyaluran BLT Dana Desa Tahap I dijadwalkan tanggal 25 bulan ini di Kantor Desa. Harap Ketua RT memverifikasi data warga prasejahtera di wilayah masing-masing.
+        <p className="text-[11px] text-slate-600 leading-relaxed">
+          {loading ? 'Memperbarui ringkasan data…' : statsSource === 'database' ? 'Ringkasan mengikuti data warga dan penerima bantuan yang tersimpan di database.' : isOnline ? 'Layanan data belum merespons; ringkasan terakhir dari perangkat ditampilkan.' : 'Mode offline: ringkasan terakhir dari perangkat ditampilkan sampai koneksi pulih.'}
         </p>
       </div>
     </div>

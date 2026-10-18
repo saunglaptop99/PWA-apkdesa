@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import BrandPageHeader from '../components/common/BrandPageHeader';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { normalizeWilayah } from './WargaPage';
+import { readUserCache, writeUserCache, filterByProfileScope } from '../lib/userCache';
+import { fetchAllRows } from '../lib/fetchAllRows';
 import {
   ShieldCheck,
   AlertCircle,
@@ -13,35 +15,17 @@ import {
   Search,
 } from 'lucide-react';
 
-const INITIAL_BANSOS_PROGRAMS = [
-  {
-    id: 'b-1',
-    nama_program: 'BLT Dana Desa 2026',
-    tahun_anggaran: 2026,
-    keterangan: 'Bantuan Langsung Tunai Rp 300.000 / bulan untuk keluarga prasejahtera terdampak ekonomi.',
-  },
-  {
-    id: 'b-2',
-    nama_program: 'Program Keluarga Harapan (PKH)',
-    tahun_anggaran: 2026,
-    keterangan: 'Bantuan bersyarat untuk komponen kesehatan (ibu hamil/balita) dan pendidikan anak.',
-  },
-  {
-    id: 'b-3',
-    nama_program: 'BPNT / Bantuan Pangan Non-Tunai',
-    tahun_anggaran: 2026,
-    keterangan: 'Penyaluran beras premium 10 kg dan telur ayam melalui E-Warong desa.',
-  },
-];
-
 export default function BansosPage() {
-  const { profile } = useAuth();
+  const { profile, user, isOnline } = useAuth();
   const [bansosList, setBansosList] = useState([]);
   const [unassistedPoor, setUnassistedPoor] = useState([]);
   const [penerimaList, setPenerimaList] = useState([]);
   const [activeSubTab, setActiveSubTab] = useState('flagging'); // 'flagging' | 'program' | 'penerima'
   const [loading, setLoading] = useState(true);
   const [verifyingId, setVerifyingId] = useState(null);
+  const [showProgramForm, setShowProgramForm] = useState(false);
+  const [savingProgram, setSavingProgram] = useState(false);
+  const [programForm, setProgramForm] = useState({ nama_program: '', tahun_anggaran: String(new Date().getFullYear()), keterangan: '' });
 
   const loadData = async () => {
     setLoading(true);
@@ -50,131 +34,66 @@ export default function BansosPage() {
       const { data: bData, error: bErr } = await supabase
         .from('bantuan_sosial')
         .select('*')
-        .order('tahun_anggaran', { ascending: false });
+        .order('tahun_anggaran', { ascending: false })
+        .order('created_at', { ascending: false });
 
-      if (!bErr && bData && bData.length > 0) {
-        setBansosList(bData);
-      } else {
-        setBansosList(INITIAL_BANSOS_PROGRAMS);
-      }
+      if (bErr) throw bErr;
+      setBansosList(bData || []);
+      writeUserCache(user?.id, 'bansos-programs', bData || []);
 
       // 2. Load Unassisted Poor Citizens
-      let poorQuery = supabase
-        .from('warga')
-        .select('id, nama, nik, rt, rw, dusun, no_kk, status_ekonomi')
-        .eq('status_ekonomi', 'miskin')
-        .eq('status_kependudukan', 'aktif');
-
-      // Territory filtering di query Supabase
-      if (profile?.role === 'rt') {
-        if (profile.wilayah_rt) poorQuery = poorQuery.eq('rt', profile.wilayah_rt);
-        if (profile.wilayah_rw) poorQuery = poorQuery.eq('rw', profile.wilayah_rw);
-      } else if (profile?.role === 'rw') {
-        if (profile.wilayah_rw) poorQuery = poorQuery.eq('rw', profile.wilayah_rw);
-      } else if (profile?.role === 'dusun') {
-        if (profile.wilayah_dusun) poorQuery = poorQuery.eq('dusun', profile.wilayah_dusun);
-      }
-
-      const { data: poorData, error: poorErr } = await poorQuery;
-
-      if (!poorErr && poorData && poorData.length > 0) {
-        setUnassistedPoor(poorData);
-      } else {
-        // Fallback demo poor warga dengan filter ketat wilayah
-        const cachedWarga = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
-        let poorWarga = cachedWarga.filter(
-          (w) => w.status_ekonomi === 'miskin' && w.status_kependudukan === 'aktif'
-        );
-
-        if (poorWarga.length === 0) {
-          poorWarga = [
-            {
-              id: 'w-1',
-              nama: 'Bambang Sudarmono',
-              nik: '3201011203850001',
-              rt: '01',
-              rw: '01',
-              dusun: 'Sukamaju',
-              status_ekonomi: 'miskin',
-            },
-            {
-              id: 'w-2',
-              nama: 'Siti Aminah',
-              nik: '3201015506890002',
-              rt: '01',
-              rw: '01',
-              dusun: 'Sukamaju',
-              status_ekonomi: 'miskin',
-            },
-            {
-              id: 'w-6',
-              nama: 'Solihin bin Kosasih',
-              nik: '3201010101700006',
-              rt: '01',
-              rw: '01',
-              dusun: 'Sukamaju',
-              status_ekonomi: 'miskin',
-            },
-            {
-              id: 'w-8',
-              nama: 'Herman Wijaya',
-              nik: '3201012502900008',
-              rt: '02',
-              rw: '01',
-              dusun: 'Sukamaju',
-              status_ekonomi: 'miskin',
-            },
-          ];
-        }
+      const { data: poorData, error: poorErr } = await fetchAllRows(() => {
+        let poorQuery = supabase
+          .from('warga')
+          .select('id, nama, nik, rt, rw, dusun, no_kk, status_ekonomi')
+          .eq('status_ekonomi', 'miskin')
+          .eq('status_kependudukan', 'aktif');
 
         if (profile?.role === 'rt') {
-          poorWarga = poorWarga.filter(
-            (w) =>
-              normalizeWilayah(w.rt) === normalizeWilayah(profile.wilayah_rt) &&
-              normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
-          );
+          if (profile.wilayah_dusun) poorQuery = poorQuery.eq('dusun', profile.wilayah_dusun);
+          if (profile.wilayah_rt) poorQuery = poorQuery.eq('rt', profile.wilayah_rt);
+          if (profile.wilayah_rw) poorQuery = poorQuery.eq('rw', profile.wilayah_rw);
         } else if (profile?.role === 'rw') {
-          poorWarga = poorWarga.filter(
-            (w) => normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
-          );
+          if (profile.wilayah_dusun) poorQuery = poorQuery.eq('dusun', profile.wilayah_dusun);
+          if (profile.wilayah_rw) poorQuery = poorQuery.eq('rw', profile.wilayah_rw);
         } else if (profile?.role === 'dusun') {
-          poorWarga = poorWarga.filter(
-            (w) => w.dusun?.trim().toLowerCase() === profile.wilayah_dusun?.trim().toLowerCase()
-          );
+          if (profile.wilayah_dusun) poorQuery = poorQuery.eq('dusun', profile.wilayah_dusun);
         }
 
-        setUnassistedPoor(poorWarga);
-      }
+        return poorQuery.order('id', { ascending: true });
+      });
 
+      if (poorErr) throw poorErr;
       // 3. Load Penerima Bansos
-      const { data: penData, error: penErr } = await supabase
+      const { data: penData, error: penErr } = await fetchAllRows(() => supabase
         .from('penerima_bansos')
         .select(
           'id, tanggal_terima, status_verifikasi, bansos_id, warga:warga_id (id, nama, nik, rt, rw, dusun), bantuan_sosial:bansos_id (nama_program)'
-        );
+        )
+        .order('tanggal_terima', { ascending: false })
+        .order('id', { ascending: false }));
 
-      if (!penErr && penData && penData.length > 0) {
-        setPenerimaList(penData);
-      } else {
-        setPenerimaList([
-          {
-            id: 'pen-1',
-            tanggal_terima: '2026-03-01',
-            status_verifikasi: 'Disalurkan',
-            warga: { nama: 'Bambang Sudarmono', nik: '3201011203850001', rt: '01', rw: '01', dusun: 'Sukamaju' },
-            bantuan_sosial: { nama_program: 'BLT Dana Desa 2026' },
-          },
-          {
-            id: 'pen-2',
-            tanggal_terima: '2026-03-05',
-            status_verifikasi: 'Disalurkan',
-            warga: { nama: 'Solihin bin Kosasih', nik: '3201010101700006', rt: '01', rw: '01', dusun: 'Sukamaju' },
-            bantuan_sosial: { nama_program: 'BPNT / Bantuan Pangan Non-Tunai' },
-          },
-        ]);
-      }
+      if (penErr) throw penErr;
+      const scopedRecipients = (penData || []).filter((row) =>
+        filterByProfileScope([row.warga].filter(Boolean), profile).length > 0
+      );
+      setPenerimaList(scopedRecipients);
+      writeUserCache(user?.id, 'bansos-penerima', scopedRecipients);
+
+      // Flag warga yang belum tercatat pada program terbaru, bukan semua warga miskin.
+      const activeProgramId = bData?.[0]?.id;
+      const alreadyReceived = new Set(
+        scopedRecipients.filter((row) => row.bansos_id === activeProgramId).map((row) => row.warga?.id).filter(Boolean)
+      );
+      const scopedPoor = filterByProfileScope(poorData || [], profile)
+        .filter((warga) => !alreadyReceived.has(warga.id));
+      setUnassistedPoor(scopedPoor);
+      writeUserCache(user?.id, 'bansos-poor', scopedPoor);
     } catch (err) {
       console.warn('Error loading bansos:', err);
+      setBansosList(readUserCache(user?.id, 'bansos-programs', []));
+      setUnassistedPoor(filterByProfileScope(readUserCache(user?.id, 'bansos-poor', []), profile));
+      setPenerimaList(readUserCache(user?.id, 'bansos-penerima', []).filter((row) => filterByProfileScope([row.warga].filter(Boolean), profile).length > 0));
     } finally {
       setLoading(false);
     }
@@ -191,6 +110,8 @@ export default function BansosPage() {
         { event: '*', schema: 'public', table: 'warga' },
         () => loadData()
       )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bantuan_sosial' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'penerima_bansos' }, () => loadData())
       .subscribe();
 
     const handleLocalSync = () => loadData();
@@ -200,40 +121,70 @@ export default function BansosPage() {
       supabase.removeChannel(channel);
       window.removeEventListener('warga-updated', handleLocalSync);
     };
-  }, [profile]);
+  }, [profile, user?.id, isOnline]);
 
-  const handleVerify = (warga) => {
+  const handleVerify = async (warga) => {
+    if (profile?.role !== 'admin') return;
+    const program = bansosList[0];
+    if (!program) {
+      alert('Belum ada program bansos di database. Tambahkan program terlebih dahulu.');
+      return;
+    }
     setVerifyingId(warga.id);
-    setTimeout(() => {
-      alert(`Warga ${warga.nama} berhasil diverifikasi untuk pengajuan Bantuan Sosial!`);
-      setPenerimaList((prev) => [
-        {
-          id: 'pen-' + Date.now(),
-          tanggal_terima: new Date().toISOString().slice(0, 10),
-          status_verifikasi: 'Diverifikasi',
-          warga: { nama: warga.nama, nik: warga.nik, rt: warga.rt, rw: warga.rw, dusun: warga.dusun },
-          bantuan_sosial: { nama_program: 'BLT Dana Desa 2026' },
-        },
-        ...prev,
-      ]);
+    try {
+      const { error } = await supabase.from('penerima_bansos').upsert({
+        bansos_id: program.id,
+        warga_id: warga.id,
+        tanggal_terima: new Date().toISOString().slice(0, 10),
+        status_verifikasi: 'Diverifikasi',
+      }, { onConflict: 'bansos_id,warga_id' });
+      if (error) throw error;
+      await loadData();
+      window.dispatchEvent(new Event('bansos-updated'));
+    } catch (error) {
+      alert(`Gagal menyimpan verifikasi ke server: ${error.message}`);
+    } finally {
       setVerifyingId(null);
-    }, 600);
+    }
+  };
+
+  const handleCreateProgram = async (event) => {
+    event.preventDefault();
+    if (profile?.role !== 'admin') return;
+    const nama_program = programForm.nama_program.trim();
+    const tahun_anggaran = Number(programForm.tahun_anggaran);
+    if (!nama_program || !Number.isInteger(tahun_anggaran) || tahun_anggaran < 2000 || tahun_anggaran > 2100) {
+      alert('Nama program dan tahun anggaran yang valid wajib diisi.');
+      return;
+    }
+    setSavingProgram(true);
+    try {
+      const { data, error } = await supabase.from('bantuan_sosial').insert({
+        nama_program,
+        tahun_anggaran,
+        keterangan: programForm.keterangan.trim() || null,
+      }).select('*').single();
+      if (error) throw error;
+      const nextPrograms = [data, ...bansosList].sort((a, b) =>
+        b.tahun_anggaran - a.tahun_anggaran || new Date(b.created_at) - new Date(a.created_at)
+      );
+      setBansosList(nextPrograms);
+      writeUserCache(user?.id, 'bansos-programs', nextPrograms);
+      setProgramForm({ nama_program: '', tahun_anggaran: String(new Date().getFullYear()), keterangan: '' });
+      setShowProgramForm(false);
+      await loadData();
+      window.dispatchEvent(new Event('bansos-updated'));
+    } catch (error) {
+      alert(`Gagal menambahkan program bansos: ${error.message}`);
+    } finally {
+      setSavingProgram(false);
+    }
   };
 
   return (
-    <div className="pb-28 pt-4 px-4 max-w-md mx-auto">
+    <div className="app-page pb-28 pt-4 px-4 max-w-md mx-auto">
       {/* Header */}
-      <div className="mb-4">
-        <div className="flex items-center gap-1.5">
-          <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800">
-            <Gift size={16} />
-          </div>
-          <h2 className="text-lg font-black text-slate-800 tracking-tight">Penyaluran Bantuan Sosial</h2>
-        </div>
-        <p className="text-[11px] text-slate-500 mt-0.5">
-          Monitoring bansos & flagging prioritas warga prasejahtera
-        </p>
-      </div>
+      <BrandPageHeader title="Penyaluran Bantuan Sosial" subtitle="Monitoring bantuan dan prioritas kesejahteraan warga" className="bansos-topbar" />
 
       {/* Segmented Control Tabs */}
       <div className="flex bg-slate-200/80 p-1 rounded-2xl mb-4 text-xs font-bold text-slate-600">
@@ -278,12 +229,22 @@ export default function BansosPage() {
               <span>Flagging Anomali Kemiskinan</span>
             </div>
             <p className="text-[11px] text-amber-800 leading-relaxed">
-              Daftar warga berstatus ekonomi <strong>Miskin</strong> yang terdata di wilayah Anda dan memerlukan verifikasi bantuan sosial.
+              Daftar warga berstatus <strong>Miskin</strong> yang belum tercatat pada program terbaru di wilayah Anda.
             </p>
+            {bansosList[0] && <p className="mt-1 text-[10px] font-semibold text-amber-900">Program pemeriksaan: {bansosList[0].nama_program} · T.A {bansosList[0].tahun_anggaran}</p>}
+            {profile?.role === 'admin' && !bansosList.length && (
+              <button type="button" onClick={() => setActiveSubTab('program')} className="mt-2 text-[11px] font-bold text-teal-800 underline underline-offset-2">
+                Tambahkan program bantuan terlebih dahulu
+              </button>
+            )}
           </div>
 
           <div className="space-y-2.5">
-            {unassistedPoor.length === 0 ? (
+            {loading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-500">Memuat data bansos wilayah…</div>
+            ) : !bansosList.length ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-500">Belum ada program bantuan yang dapat digunakan.</div>
+            ) : unassistedPoor.length === 0 ? (
               <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center">
                 <CheckCircle2 size={32} className="text-emerald-500 mx-auto mb-2" />
                 <p className="text-xs font-bold text-slate-700">Semua Warga Terlayani</p>
@@ -310,14 +271,14 @@ export default function BansosPage() {
                     </p>
                   </div>
 
-                  <button
+                  {profile?.role === 'admin' && <button
                     onClick={() => handleVerify(w)}
                     disabled={verifyingId === w.id}
                     className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold shadow-sm shadow-amber-900/10 flex items-center gap-1 transition-all disabled:opacity-60 flex-shrink-0"
                   >
                     <UserCheck size={13} />
                     <span>{verifyingId === w.id ? 'Memproses...' : 'Verifikasi'}</span>
-                  </button>
+                  </button>}
                 </div>
               ))
             )}
@@ -328,6 +289,36 @@ export default function BansosPage() {
       {/* TAB 2: DAFTAR PROGRAM BANSOS */}
       {activeSubTab === 'program' && (
         <div className="space-y-3">
+          {profile?.role === 'admin' && (
+            <div className="space-y-3">
+              {!showProgramForm ? (
+                <button type="button" onClick={() => setShowProgramForm(true)} className="w-full rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 text-xs font-bold text-teal-800 flex items-center justify-center gap-2">
+                  <Plus size={15} /> Tambah Program Bantuan
+                </button>
+              ) : (
+                <form onSubmit={handleCreateProgram} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-800">Program Bantuan Baru</h3>
+                  <label className="block text-[11px] font-semibold text-slate-700">
+                    Nama Program
+                    <input required maxLength={120} value={programForm.nama_program} onChange={(e) => setProgramForm((prev) => ({ ...prev, nama_program: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-normal" placeholder="Contoh: Bantuan Pangan Desa" />
+                  </label>
+                  <label className="block text-[11px] font-semibold text-slate-700">
+                    Tahun Anggaran
+                    <input required type="number" min="2000" max="2100" value={programForm.tahun_anggaran} onChange={(e) => setProgramForm((prev) => ({ ...prev, tahun_anggaran: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-normal" />
+                  </label>
+                  <label className="block text-[11px] font-semibold text-slate-700">
+                    Keterangan (opsional)
+                    <textarea maxLength={1000} rows={3} value={programForm.keterangan} onChange={(e) => setProgramForm((prev) => ({ ...prev, keterangan: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-normal" placeholder="Keterangan singkat program" />
+                  </label>
+                  <div className="flex gap-2">
+                    <button type="button" disabled={savingProgram} onClick={() => setShowProgramForm(false)} className="flex-1 rounded-lg border border-slate-200 py-2 text-xs font-semibold text-slate-600">Batal</button>
+                    <button type="submit" disabled={savingProgram} className="flex-1 rounded-lg bg-teal-800 py-2 text-xs font-bold text-white disabled:opacity-60">{savingProgram ? 'Menyimpan…' : 'Simpan Program'}</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+          {bansosList.length === 0 && !loading && <p className="rounded-xl border border-slate-200 bg-white p-5 text-center text-xs text-slate-500">Belum ada program bantuan yang tersimpan.</p>}
           {bansosList.map((b) => (
             <div
               key={b.id}

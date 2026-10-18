@@ -1,20 +1,28 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import jsPDF from 'jspdf';
 import { useDesa } from '../../context/DesaContext';
 import { Printer, X, FileCheck, CheckCircle2 } from 'lucide-react';
 
-export default function SuratModal({ warga, onClose, userProfile }) {
+export default function SuratModal({ warga, onClose, userProfile, requestRecord, onIssued }) {
   const { pengaturanDesa } = useDesa();
 
-  const [jenisSurat, setJenisSurat] = useState('Surat Pengantar Domisili');
-  const [keperluan, setKeperluan] = useState('Pengurusan Administrasi Kependudukan');
-
-  const [namaPemerintah, setNamaPemerintah] = useState(
-    `PEMERINTAH KABUPATEN ${(pengaturanDesa?.nama_kabupaten || 'BOGOR').toUpperCase()}`
-  );
-  const [namaKecamatanDesa, setNamaKecamatanDesa] = useState(
-    `KECAMATAN ${(pengaturanDesa?.nama_kecamatan || 'SUKARAJA').toUpperCase()} • DESA ${(pengaturanDesa?.nama_desa || 'SUKAMAJU').toUpperCase()}`
-  );
+  const [jenisSurat, setJenisSurat] = useState(requestRecord?.jenis_surat || 'Surat Keterangan Domisili');
+  const [keperluan, setKeperluan] = useState(requestRecord?.keperluan || '');
+  const [nomorSurat, setNomorSurat] = useState(requestRecord?.nomor_surat || '');
+  const [savingRecord, setSavingRecord] = useState(false);
+  const [recordError, setRecordError] = useState('');
+  const jenisSuratOptions = [
+    'Surat Keterangan Domisili',
+    'Surat Keterangan Tidak Mampu (SKTM)',
+    'Surat Keterangan Usaha (SKU)',
+    'Surat Pengantar SKCK',
+    'Surat Pengantar KTP / KK',
+    'Surat Keterangan Kelahiran',
+    'Surat Keterangan Kematian',
+    'Surat Keterangan Pindah',
+    'Surat Pengantar Nikah',
+    'Surat Lainnya',
+  ];
   const [namaKadesOrRT, setNamaKadesOrRT] = useState(
     userProfile?.role === 'admin'
       ? pengaturanDesa?.nama_kepala_desa || userProfile?.nama_lengkap
@@ -27,9 +35,21 @@ export default function SuratModal({ warga, onClose, userProfile }) {
       ? `Ketua RW ${warga.rw}`
       : userProfile?.role === 'dusun'
       ? `Kepala Dusun ${warga.dusun}`
-      : `Kepala Desa ${pengaturanDesa?.nama_desa || 'Sukamaju'}`
+      : `Kepala Desa ${pengaturanDesa?.nama_desa || 'Desa'}`
   );
   const [successNotif, setSuccessNotif] = useState(false);
+
+  useEffect(() => {
+    if (userProfile?.role === 'admin' && pengaturanDesa?.nama_kepala_desa) {
+      setNamaKadesOrRT(pengaturanDesa.nama_kepala_desa);
+    }
+  }, [pengaturanDesa?.nama_kepala_desa, userProfile?.role]);
+
+  const namaKabupaten = String(pengaturanDesa?.nama_kabupaten || 'Bekasi').replace(/^kabupaten\s+/i, '').trim();
+  const namaKecamatan = String(pengaturanDesa?.nama_kecamatan || '').replace(/^kecamatan\s+/i, '').trim();
+  const namaDesa = String(pengaturanDesa?.nama_desa || '').replace(/^desa\s+/i, '').trim();
+  const namaPemerintah = `PEMERINTAH KABUPATEN ${namaKabupaten.toUpperCase()}`;
+  const namaKecamatanDesa = `${namaKecamatan ? `KECAMATAN ${namaKecamatan.toUpperCase()} • ` : ''}${namaDesa ? `DESA ${namaDesa.toUpperCase()}` : 'PEMERINTAH DESA'}`;
 
   const quickKeperluanOptions = [
     'Pengurusan Administrasi Kependudukan',
@@ -40,7 +60,15 @@ export default function SuratModal({ warga, onClose, userProfile }) {
     'Persyaratan Surat Keterangan Catatan Kepolisian (SKCK)',
   ];
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
+    if (!namaDesa || !namaKecamatan) {
+      alert('Lengkapi nama desa dan kecamatan pada Pengaturan Desa sebelum menerbitkan konsep surat.');
+      return;
+    }
+    if (!nomorSurat.trim()) {
+      alert('Isi nomor surat resmi yang sudah ditetapkan desa sebelum membuat PDF.');
+      return;
+    }
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -84,10 +112,8 @@ export default function SuratModal({ warga, onClose, userProfile }) {
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    const noSurat = `Nomor: 470 / ${Math.floor(100 + Math.random() * 900)} / ${
-      warga.rt ? `RT.${warga.rt}` : 'PEM'
-    }-${warga.rw ? `RW.${warga.rw}` : 'DS'} / ${new Date().getFullYear()}`;
-    doc.text(noSurat, pageWidth / 2, 55, { align: 'center' });
+    const nomorSuratText = `Nomor: ${nomorSurat.trim()}`;
+    doc.text(nomorSuratText, pageWidth / 2, 55, { align: 'center' });
 
     // ISI SURAT
     doc.setFontSize(10.5);
@@ -102,8 +128,7 @@ export default function SuratModal({ warga, onClose, userProfile }) {
       ['Agama', `: ${warga.agama || 'Islam'}`],
       ['Pekerjaan', `: ${warga.pekerjaan || '-'}`],
       ['Status Hubungan (SHDK)', `: ${warga.shdk || 'Kepala Keluarga'}`],
-      ['Alamat KTP', `: RT ${warga.rt} / RW ${warga.rw}, Dusun ${warga.dusun}, Desa ${pengaturanDesa?.nama_desa || 'Sukamaju'}`],
-      ['Status Ekonomi', `: ${warga.status_ekonomi ? warga.status_ekonomi.toUpperCase() : 'MAMPU'}`],
+      ['Alamat Domisili', `: RT ${warga.rt} / RW ${warga.rw}, Dusun ${warga.dusun}, Desa ${namaDesa || '-'}`],
       ['Keperluan', `: ${keperluan}`],
     ];
 
@@ -118,7 +143,7 @@ export default function SuratModal({ warga, onClose, userProfile }) {
 
     // PARAGRAF PENUTUP
     currentY += 4;
-    const penutup = `Orang tersebut di atas adalah benar-benar warga penduduk yang bertempat tinggal di wilayah Desa ${pengaturanDesa?.nama_desa || 'Sukamaju'} dan berkelakuan baik. Surat pengantar ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.`;
+    const penutup = `Orang tersebut di atas tercatat sebagai warga yang berdomisili di wilayah Desa ${namaDesa || '-'}. Surat pengantar ini dibuat untuk keperluan ${keperluan}.`;
     const splitPenutup = doc.splitTextToSize(penutup, pageWidth - 44);
     doc.setFont('helvetica', 'normal');
     doc.text(splitPenutup, 22, currentY);
@@ -152,9 +177,21 @@ export default function SuratModal({ warga, onClose, userProfile }) {
     doc.setFontSize(8);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(100, 100, 100);
-    doc.text(`* Dokumen sah diterbitkan melalui Aplikasi SIM Aparat Desa ${pengaturanDesa?.nama_desa || ''} Mobile PWA.`, 22, 282);
+    doc.text('DRAF • Perlu diperiksa dan ditandatangani pejabat berwenang sebelum digunakan.', 22, 282);
 
     const safeFileName = `${jenisSurat.replace(/\s+/g, '_')}_${warga.nama.replace(/\s+/g, '_')}.pdf`;
+    if (onIssued) {
+      setSavingRecord(true);
+      setRecordError('');
+      try {
+        await onIssued(nomorSurat);
+      } catch (error) {
+        setRecordError(error.message || 'Nomor surat gagal disimpan.');
+        setSavingRecord(false);
+        return;
+      }
+      setSavingRecord(false);
+    }
     doc.save(safeFileName);
 
     setSuccessNotif(true);
@@ -170,7 +207,7 @@ export default function SuratModal({ warga, onClose, userProfile }) {
               <FileCheck size={20} />
             </div>
             <div>
-              <h3 className="font-bold text-slate-800 text-base">Cetak Surat Pengantar</h3>
+              <h3 className="font-bold text-slate-800 text-base">{requestRecord ? 'Proses Surat Layanan' : 'Cetak Surat Pengantar'}</h3>
               <p className="text-[11px] text-slate-500">
                 Pemerintah Desa {pengaturanDesa?.nama_desa} • 1-Klik Unduh PDF
               </p>
@@ -190,6 +227,7 @@ export default function SuratModal({ warga, onClose, userProfile }) {
             <span>Dokumen PDF berhasil dibuat dan diunduh ke perangkat Anda!</span>
           </div>
         )}
+        {recordError && <div role="alert" className="mb-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">{recordError}</div>}
 
         <div className="space-y-4">
           {/* Info Warga Terpilih */}
@@ -209,16 +247,14 @@ export default function SuratModal({ warga, onClose, userProfile }) {
             <select
               value={jenisSurat}
               onChange={(e) => setJenisSurat(e.target.value)}
+              disabled={Boolean(requestRecord)}
               className="w-full p-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white focus:ring-2 focus:ring-teal-600 outline-none shadow-sm"
             >
-              <option value="Surat Pengantar Domisili">Surat Pengantar Domisili</option>
-              <option value="Surat Keterangan Tidak Mampu (SKTM)">Surat Keterangan Tidak Mampu (SKTM)</option>
-              <option value="Surat Pengantar Keterangan Usaha">Surat Pengantar Keterangan Usaha (SKU)</option>
-              <option value="Surat Pengantar SKCK">Surat Pengantar SKCK Kepolisian</option>
-              <option value="Surat Pengantar KTP / KK">Surat Pengantar Pembuatan KTP / KK</option>
-              <option value="Surat Pengantar Kehilangan Dokumen">Surat Pengantar Keterangan Kehilangan</option>
+              {jenisSuratOptions.map((jenis) => <option key={jenis} value={jenis}>{jenis}</option>)}
             </select>
           </div>
+
+          <p className="-mt-2 text-[10px] leading-relaxed text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-2">PDF ini draf keterangan umum. Admin wajib memeriksa kesesuaian isi dan format dengan ketentuan jenis surat desa sebelum ditandatangani.</p>
 
           {/* Keperluan */}
           <div>
@@ -227,6 +263,7 @@ export default function SuratModal({ warga, onClose, userProfile }) {
               type="text"
               value={keperluan}
               onChange={(e) => setKeperluan(e.target.value)}
+              readOnly={Boolean(requestRecord)}
               className="w-full p-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-teal-600 outline-none shadow-sm"
               placeholder="Contoh: Pengajuan Beasiswa / Buka Rekening Bank"
             />
@@ -243,6 +280,20 @@ export default function SuratModal({ warga, onClose, userProfile }) {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">Nomor Surat Resmi *</label>
+            <input
+              type="text"
+              required
+              maxLength={80}
+              value={nomorSurat}
+              onChange={(e) => setNomorSurat(e.target.value)}
+              className="w-full p-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-teal-600 outline-none shadow-sm"
+              placeholder="Masukkan nomor dari buku agenda surat desa"
+            />
+            <p className="mt-1 text-[10px] text-slate-500">Nomor tidak dibuat acak dan harus mengikuti buku agenda desa.</p>
           </div>
 
           {/* Pengaturan Penandatangan */}
@@ -270,10 +321,11 @@ export default function SuratModal({ warga, onClose, userProfile }) {
           {/* Tombol Cetak / Unduh */}
           <button
             onClick={generatePDF}
+            disabled={savingRecord}
             className="w-full py-3 mt-2 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl font-bold flex items-center justify-center gap-2 text-sm shadow-lg shadow-teal-900/20 transition-all"
           >
             <Printer size={18} />
-            Unduh Dokumen PDF
+            {savingRecord ? 'Menyimpan arsip…' : requestRecord?.nomor_surat ? 'Unduh Ulang PDF' : 'Simpan Nomor & Unduh Draf PDF'}
           </button>
         </div>
       </div>

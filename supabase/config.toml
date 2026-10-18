@@ -1,0 +1,8 @@
+[functions.pin-login]
+verify_jwt = false
+
+[functions.bootstrap-admin]
+verify_jwt = false
+
+[functions.manage-aparat]
+verify_jwt = true

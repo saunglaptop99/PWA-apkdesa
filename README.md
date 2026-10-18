@@ -12,8 +12,8 @@ Aplikasi Progressive Web App (PWA) modern, mobile-first, dan offline-ready yang 
 
 ## Fitur Utama
 
-### 1. Pembatasan Hak Akses & Isolasi Wilayah (Row-Level Security)
-Data warga diisolasi secara ketat sehingga aparat hanya dapat melihat data sesuai wilayah kewenangannya:
+### 1. Hak Akses & Isolasi Wilayah
+Setiap aparat masuk dengan PIN unik yang diverifikasi server lalu mendapat sesi Supabase Auth. Profil dipasangkan dengan UUID user Auth, sedangkan pembatasan data ditegakkan di PostgreSQL RLS:
 - **Admin Desa**: Akses penuh (CRUD data warga, import/export Excel, pencatatan mutasi, kelola program & penyaluran bansos).
 - **Kepala Dusun (Kadus)**: Akses *read-only* seluruh warga di wilayah dusunnya.
 - **Ketua RW**: Akses *read-only* seluruh warga di wilayah RW yang dipimpinnya.
@@ -30,10 +30,10 @@ Data warga diisolasi secara ketat sehingga aparat hanya dapat melihat data sesua
   - *Surat Pengantar Pembuatan KTP / Kartu Keluarga*
   - *Surat Keterangan Kehilangan Dokumen*
 
-### 3. PWA & Offline Caching (Service Worker)
+### 3. PWA & Cache Offline Terbatas
 - Menggunakan `vite-plugin-pwa` dengan `registerType: 'autoUpdate'`.
-- Workbox runtime caching untuk API Supabase (`NetworkFirst` dengan masa simpan cache 3 hari).
-- Indikator status jaringan real-time (Online / Offline). Saat aparat berada di area blank spot tanpa sinyal internet, data kependudukan yang sudah dibuka tetap dapat diakses dan surat tetap dapat digenerate.
+- Service worker hanya menyimpan application shell; API Supabase dan respons berisi data pribadi tidak disimpan Workbox.
+- Data offline yang memang sudah dimuat disimpan lokal per akun dan difilter lagi sesuai wilayah pada profil terakhir.
 
 ### 4. Import & Export Excel (Khusus Admin)
 - Export data master kependudukan ke format spreadsheet `.xlsx` (`xlsx` library).
@@ -67,21 +67,31 @@ npm install
 ### 2. Konfigurasi Lingkungan (`.env`)
 Pastikan file `.env` telah terisi kredensial Supabase:
 ```env
-VITE_SUPABASE_URL=https://sylnxlenycyulkwrlxqm.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_HCJ40TwFkNjo3pHPrQjYsA_BX2-wAFX
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY
 ```
 
 ### 3. Inisialisasi Database Supabase
-Buka **Supabase SQL Editor** pada project Supabase Anda, lalu salin dan jalankan seluruh isi skrip SQL dari file:
-[`supabase/schema.sql`](./supabase/schema.sql)
+Buka **Supabase SQL Editor** pada project Supabase Anda. Untuk database baru maupun peningkatan dari skema lama, jalankan skrip berikut berurutan. Jalankan `migration_marital_event_enum.sql` sebagai skrip tersendiri sebelum migration peristiwa agar nilai enum baru sudah tersedia:
+
+1. `supabase/schema.sql`
+2. `supabase/migration_marital_event_enum.sql`
+3. `supabase/migration_marital_events.sql`
+4. `supabase/migration_secure_auth_and_rls.sql`
+5. `supabase/migration_pin_auth.sql`
+6. `supabase/migration_surat_layanan.sql`
+7. `supabase/migration_security_audit.sql`
+
+Jika tabel warga berasal dari versi yang sangat lama, `schema.sql` menambahkan kolom yang hilang melalui `ADD COLUMN IF NOT EXISTS`; `migration_add_demographics.sql` tersedia sebagai migrasi tambahan untuk deployment lama.
 
 Skrip ini akan menginisialisasi:
 - Enum types (`user_role`, `status_warga`, `ekonomi_warga`, `jenis_mutasi`)
 - Tabel `profiles`, `warga`, `mutasi_kependudukan`, `bantuan_sosial`, dan `penerima_bansos`
-- Aturan Row-Level Security (RLS) lengkap
+- Definisi tabel dan trigger mutasi
+- Migration RLS yang membatasi warga berdasarkan role/wilayah dan membatasi perubahan ke admin
 - Helper function `get_my_profile()`
 - Trigger otomatisasi mutasi status warga
-- Data benih awal (seed data)
+- Tidak ada akun atau data warga demo yang di-seed
 
 ### 4. Menjalankan di Server Lokal
 ```bash
@@ -97,12 +107,38 @@ npm run preview
 
 ---
 
-## Akun Demo & Simulasi Peran (Role Switcher)
-Pada halaman Login dan Profil telah disediakan **Fitur Uji Coba Cepat (Simulator Role)** sehingga Anda dapat langsung merasakan isolasi data warga antar peran:
-- **Admin**: `admin@desa.id` (Akses semua data warga, mutasi, bansos, dan import/export)
-- **Kepala Dusun**: `kadus1@desa.id` (Dusun Sukamaju)
-- **Ketua RW**: `rw01@desa.id` (RW 01 Dusun Sukamaju)
-- **Ketua RT**: `rt01@desa.id` (RT 01 / RW 01 Dusun Sukamaju)
+## Menyiapkan login PIN dan akun aparat
+
+Login PIN menggunakan Supabase Edge Functions. PIN tidak pernah disimpan di browser atau dikirim langsung ke tabel profil. Server mengubah PIN menjadi HMAC dengan `PIN_PEPPER`, mewajibkan PIN unik, membatasi percobaan per alamat IP, lalu membuat sesi Supabase Auth. Buat `PIN_PEPPER` acak minimal 32 karakter (disarankan 64 karakter acak) dan jangan taruh di `.env` frontend.
+
+1. Pastikan urutan inisialisasi pada bagian sebelumnya sudah diterapkan, termasuk `migration_pin_auth.sql`.
+2. Pasang Supabase CLI dan hubungkan folder ini ke project Supabase.
+3. Set secret server dan deploy functions:
+
+```bash
+supabase secrets set PIN_PEPPER="nilai-acak-rahasia-minimal-32-karakter" BOOTSTRAP_SECRET="nilai-bootstrap-acak-sekali-pakai"
+supabase functions deploy pin-login --no-verify-jwt
+supabase functions deploy manage-aparat
+supabase functions deploy bootstrap-admin --no-verify-jwt
+```
+
+4. Buat admin pertama menggunakan endpoint `bootstrap-admin` satu kali. Kirim `POST` ke `https://<project-ref>.supabase.co/functions/v1/bootstrap-admin` dengan header `apikey: <anon-key>` dan body JSON `{"bootstrap_secret":"<BOOTSTRAP_SECRET>","nama_lengkap":"Admin Desa","pin":"PIN6ANGKA"}`. Simpan PIN dengan aman dan sampaikan langsung kepada admin. Untuk admin yang sudah ada, sertakan `user_id` admin tersebut; endpoint hanya dapat mengisi PIN jika belum ada kredensial PIN.
+5. Setelah bootstrap berhasil, segera hapus rahasia bootstrap (`supabase secrets unset BOOTSTRAP_SECRET`) dan hapus/nonaktifkan function `bootstrap-admin` dari project. Ini mencegah endpoint bootstrap dipakai lagi.
+6. Admin masuk memakai PIN, lalu membuka **Pengaturan → Tambah Aparat**. Isi role, dusun/RW/RT sesuai tugas, dan PIN awal unik. PIN aparat dapat diganti dari form edit dengan mengisi PIN baru. Saat reset, PIN lama tidak bisa dilihat; admin menetapkan PIN baru dan menyampaikannya langsung kepada aparat.
+
+### Lupa PIN dan pengamanan sesi
+
+- Aparat yang lupa PIN meminta admin menggantinya dari **Pengaturan → Aparat → Edit → Reset PIN**. Aplikasi meminta konfirmasi sebelum menyimpan dan mencatat tindakan pada tab **Aktivitas**.
+- PIN admin yang terlupa harus dipulihkan oleh pengelola project Supabase melalui akses server tepercaya. Jangan membuat endpoint pemulihan PIN publik atau membagikan `PIN_PEPPER`, service-role key, maupun PIN melalui chat umum.
+- Semua role otomatis keluar dari sesi di browser setelah 30 menit tanpa aktivitas atau setelah 12 jam sejak sesi dimulai. Batas ini diterapkan di sisi aplikasi/browser; ini bukan pencabutan paksa token pada perangkat lain.
+- Tab **Aktivitas** hanya dapat dibaca admin. Audit database menyimpan aktor, jenis aksi, tabel/record, dan nama kolom yang berubah; nilainya (termasuk NIK dan PIN) tidak disimpan dalam audit.
+- Percobaan PIN sudah dibatasi server-side dan PIN disimpan sebagai HMAC. Pastikan `PIN_PEPPER` tetap rahasia dan stabil; menggantinya tanpa rencana migrasi akan membuat PIN lama tidak cocok.
+
+Profil lama dari skema sebelumnya perlu ditautkan ke user Auth yang sesuai sebelum dipakai. Jika akun admin lama sudah ada, gunakan `user_id` profil admin saat bootstrap untuk mendaftarkan PIN pertama. Setelah admin masuk, isi master wilayah di panel admin sebelum membuat akun aparat wilayah atau data warga.
+
+RLS membatasi hasil baca warga berdasarkan wilayah pada profil server: RT hanya RT yang ditugaskan, RW seluruh RT di RW tersebut, kepala dusun seluruh wilayah dusunnya, dan admin seluruh desa. Filter di halaman hanya untuk kemudahan; database tetap menjadi penjaga akses. Perubahan role/wilayah di profil berlaku pada query berikutnya.
+
+Jika database sebelumnya sudah diinisialisasi, baris contoh warga/profil/wilayah/pengaturan yang pernah di-seed tetap berada di database lama. Periksa dan hapus hanya setelah memastikan baris tersebut memang data uji; migration keamanan sengaja tidak menghapus data lama.
 
 ---
 

@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useDesa } from '../context/DesaContext';
+import { readUserCache, writeUserCache, filterByProfileScope } from '../lib/userCache';
+import { fetchAllRows } from '../lib/fetchAllRows';
 import {
   Search,
   FileText,
@@ -34,372 +36,10 @@ import {
   FileSpreadsheet,
   Download,
 } from 'lucide-react';
-import SuratModal from '../components/surat/SuratModal';
 import ExcelImportExport from '../components/warga/ExcelImportExport';
 import WargaFormModal from '../components/warga/WargaFormModal';
 import RekapDownloadModal from '../components/warga/RekapDownloadModal';
 
-// Sample fallback warga in case database is freshly created or offline
-const INITIAL_DEMO_WARGA = [
-  // RT 01 / RW 01 (Sukamaju)
-  {
-    id: 'w-1',
-    nik: '3201011203850001',
-    no_kk: '3201011203850000',
-    nama: 'Bambang Sudarmono',
-    tempat_lahir: 'Bandung',
-    tanggal_lahir: '1985-03-12',
-    jenis_kelamin: 'Laki-laki',
-    golongan_darah: 'O',
-    agama: 'Islam',
-    no_akta_lahir: '3201-LT-12031985-001',
-    status_ktp: 'Sudah KTP-el',
-    shdk: 'Kepala Keluarga',
-    status_perkawinan: 'Kawin',
-    no_akta_nikah_cerai: 'KUA.10.01/PW.01/123/2010',
-    nama_ayah: 'Sudarmono Kartodirjo',
-    nama_ibu: 'Suparni',
-    pendidikan_terakhir: 'SMA/SMK/Sederajat',
-    status_sekolah: 'Tidak / Sudah Lulus',
-    pekerjaan: 'Petani',
-    rentang_penghasilan: 'Rp 1.000.000 - Rp 2.500.000',
-    status_ekonomi: 'miskin',
-    bansos_pkh: true,
-    bansos_bpnt: true,
-    bansos_blt_desa: false,
-    bpjs_pbi: true,
-    dusun: 'Sukamaju',
-    rw: '01',
-    rt: '01',
-    alamat_detail: 'Jl. Melati No. 12 RT 01',
-    status_tempat_tinggal: 'Milik Sendiri',
-    telepon: '0812-9876-5431',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: false,
-    jenis_disabilitas: 'Tidak Ada',
-    penyakit_kronis: 'Tidak Ada',
-    status_kesehatan_khusus: 'Normal',
-  },
-  {
-    id: 'w-2',
-    nik: '3201015506890002',
-    no_kk: '3201011203850000',
-    nama: 'Siti Aminah',
-    tempat_lahir: 'Cianjur',
-    tanggal_lahir: '1989-06-15',
-    jenis_kelamin: 'Perempuan',
-    golongan_darah: 'A',
-    agama: 'Islam',
-    no_akta_lahir: '3201-LT-15061989-002',
-    status_ktp: 'Sudah KTP-el',
-    shdk: 'Istri',
-    status_perkawinan: 'Kawin',
-    no_akta_nikah_cerai: 'KUA.10.01/PW.01/123/2010',
-    nama_ayah: 'Hasan Basri',
-    nama_ibu: 'Maimunah',
-    pendidikan_terakhir: 'SMP/Sederajat',
-    status_sekolah: 'Tidak / Sudah Lulus',
-    pekerjaan: 'Ibu Rumah Tangga',
-    rentang_penghasilan: 'Belum Berpenghasilan',
-    status_ekonomi: 'miskin',
-    bansos_pkh: true,
-    bansos_bpnt: true,
-    bansos_blt_desa: false,
-    bpjs_pbi: true,
-    dusun: 'Sukamaju',
-    rw: '01',
-    rt: '01',
-    alamat_detail: 'Jl. Melati No. 12 RT 01',
-    status_tempat_tinggal: 'Milik Sendiri',
-    telepon: '0812-9876-5432',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: false,
-    jenis_disabilitas: 'Tidak Ada',
-    penyakit_kronis: 'Tidak Ada',
-    status_kesehatan_khusus: 'Ibu Hamil',
-  },
-  {
-    id: 'w-9',
-    nik: '3201011505230009',
-    no_kk: '3201011203850000',
-    nama: 'Rizky Sudarmono',
-    tempat_lahir: 'Bogor',
-    tanggal_lahir: '2023-05-15',
-    jenis_kelamin: 'Laki-laki',
-    golongan_darah: 'O',
-    agama: 'Islam',
-    no_akta_lahir: '3201-AL-15052023-088',
-    status_ktp: 'Belum Wajib KTP',
-    shdk: 'Anak',
-    status_perkawinan: 'Belum Kawin',
-    no_akta_nikah_cerai: '',
-    nama_ayah: 'Bambang Sudarmono',
-    nama_ibu: 'Siti Aminah',
-    pendidikan_terakhir: 'Tidak / Belum Sekolah',
-    status_sekolah: 'Tidak / Belum Sekolah',
-    pekerjaan: 'Belum Bekerja',
-    rentang_penghasilan: 'Belum Berpenghasilan',
-    status_ekonomi: 'miskin',
-    bansos_pkh: true,
-    bansos_bpnt: false,
-    bansos_blt_desa: false,
-    bpjs_pbi: true,
-    dusun: 'Sukamaju',
-    rw: '01',
-    rt: '01',
-    alamat_detail: 'Jl. Melati No. 12 RT 01',
-    status_tempat_tinggal: 'Milik Sendiri',
-    telepon: '',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: false,
-    jenis_disabilitas: 'Tidak Ada',
-    penyakit_kronis: 'Tidak Ada',
-    status_kesehatan_khusus: 'Balita (0-5 Tahun)',
-  },
-  {
-    id: 'w-6',
-    nik: '3201010101700006',
-    no_kk: '3201010101700000',
-    nama: 'Solihin bin Kosasih',
-    tempat_lahir: 'Tasikmalaya',
-    tanggal_lahir: '1970-01-01',
-    jenis_kelamin: 'Laki-laki',
-    golongan_darah: 'B',
-    agama: 'Islam',
-    no_akta_lahir: '3201-LT-01011970-006',
-    status_ktp: 'Sudah KTP-el',
-    shdk: 'Kepala Keluarga',
-    status_perkawinan: 'Cerai Mati',
-    no_akta_nikah_cerai: 'KUA.10/AC/1998',
-    nama_ayah: 'Kosasih',
-    nama_ibu: 'Rohayati',
-    pendidikan_terakhir: 'SD / Sederajat',
-    status_sekolah: 'Tidak / Sudah Lulus',
-    pekerjaan: 'Buruh Tani',
-    rentang_penghasilan: '< Rp 1.000.000',
-    status_ekonomi: 'miskin',
-    bansos_pkh: false,
-    bansos_bpnt: true,
-    bansos_blt_desa: true,
-    bpjs_pbi: true,
-    dusun: 'Sukamaju',
-    rw: '01',
-    rt: '01',
-    alamat_detail: 'Jl. Randu Alas RT 01',
-    status_tempat_tinggal: 'Menumpang',
-    telepon: '',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: true,
-    jenis_disabilitas: 'Fisik',
-    penyakit_kronis: 'Hipertensi',
-    status_kesehatan_khusus: 'Normal',
-  },
-
-  // RT 02 / RW 01 (Sukamaju)
-  {
-    id: 'w-3',
-    nik: '3201011808920003',
-    no_kk: '3201011808920000',
-    nama: 'Agus Supriatna',
-    tempat_lahir: 'Sumedang',
-    tanggal_lahir: '1992-08-18',
-    jenis_kelamin: 'Laki-laki',
-    golongan_darah: 'AB',
-    agama: 'Islam',
-    no_akta_lahir: '3201-LT-18081992-003',
-    status_ktp: 'Sudah KTP-el',
-    shdk: 'Kepala Keluarga',
-    status_perkawinan: 'Kawin',
-    no_akta_nikah_cerai: 'KUA.10/NK/2016',
-    nama_ayah: 'Endang Supriatna',
-    nama_ibu: 'Tati Warsiti',
-    pendidikan_terakhir: 'SMA/SMK/Sederajat',
-    status_sekolah: 'Tidak / Sudah Lulus',
-    pekerjaan: 'Buruh Harian Lepas',
-    rentang_penghasilan: 'Rp 1.000.000 - Rp 2.500.000',
-    status_ekonomi: 'rentan',
-    bansos_pkh: false,
-    bansos_bpnt: true,
-    bansos_blt_desa: false,
-    bpjs_pbi: true,
-    dusun: 'Sukamaju',
-    rw: '01',
-    rt: '02',
-    alamat_detail: 'Kp. Babakan RT 02',
-    status_tempat_tinggal: 'Sewa / Kontrak',
-    telepon: '0857-1234-5678',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: false,
-    jenis_disabilitas: 'Tidak Ada',
-    penyakit_kronis: 'Tidak Ada',
-    status_kesehatan_khusus: 'Normal',
-  },
-  {
-    id: 'w-7',
-    nik: '3201016509940007',
-    no_kk: '3201011808920000',
-    nama: 'Nurhayati Rahmawati',
-    tempat_lahir: 'Bogor',
-    tanggal_lahir: '1994-09-25',
-    jenis_kelamin: 'Perempuan',
-    golongan_darah: 'O',
-    agama: 'Islam',
-    no_akta_lahir: '3201-LT-25091994-007',
-    status_ktp: 'Sudah KTP-el',
-    shdk: 'Istri',
-    status_perkawinan: 'Kawin',
-    no_akta_nikah_cerai: 'KUA.10/NK/2016',
-    nama_ayah: 'Darmanto',
-    nama_ibu: 'Suratmi',
-    pendidikan_terakhir: 'Sarjana (S1 / D4)',
-    status_sekolah: 'Tidak / Sudah Lulus',
-    pekerjaan: 'Karyawan Swasta',
-    rentang_penghasilan: 'Rp 2.500.000 - Rp 5.000.000',
-    status_ekonomi: 'mampu',
-    bansos_pkh: false,
-    bansos_bpnt: false,
-    bansos_blt_desa: false,
-    bpjs_pbi: false,
-    dusun: 'Sukamaju',
-    rw: '01',
-    rt: '02',
-    alamat_detail: 'Kp. Babakan RT 02',
-    status_tempat_tinggal: 'Milik Sendiri',
-    telepon: '0813-8888-7777',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: false,
-    jenis_disabilitas: 'Tidak Ada',
-    penyakit_kronis: 'Tidak Ada',
-    status_kesehatan_khusus: 'Ibu Menyusui',
-  },
-  {
-    id: 'w-8',
-    nik: '3201012502900008',
-    no_kk: '3201012502900000',
-    nama: 'Herman Wijaya',
-    tempat_lahir: 'Sukabumi',
-    tanggal_lahir: '1990-02-25',
-    jenis_kelamin: 'Laki-laki',
-    golongan_darah: 'A',
-    agama: 'Islam',
-    no_akta_lahir: '3201-LT-25021990-008',
-    status_ktp: 'Sudah KTP-el',
-    shdk: 'Kepala Keluarga',
-    status_perkawinan: 'Kawin',
-    no_akta_nikah_cerai: 'KUA.10/NK/2014',
-    nama_ayah: 'Wijaya',
-    nama_ibu: 'Kokom',
-    pendidikan_terakhir: 'SMA/SMK/Sederajat',
-    status_sekolah: 'Tidak / Sudah Lulus',
-    pekerjaan: 'Pedagang Warung',
-    rentang_penghasilan: 'Rp 1.000.000 - Rp 2.500.000',
-    status_ekonomi: 'miskin',
-    bansos_pkh: false,
-    bansos_bpnt: true,
-    bansos_blt_desa: true,
-    bpjs_pbi: true,
-    dusun: 'Sukamaju',
-    rw: '01',
-    rt: '02',
-    alamat_detail: 'Jl. Anggrek No. 8 RT 02',
-    status_tempat_tinggal: 'Milik Sendiri',
-    telepon: '0821-2222-3333',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: false,
-    jenis_disabilitas: 'Tidak Ada',
-    penyakit_kronis: 'Asma',
-    status_kesehatan_khusus: 'Normal',
-  },
-
-  // RW 02 (Mekarsari)
-  {
-    id: 'w-4',
-    nik: '3201012204780004',
-    no_kk: '3201012204780000',
-    nama: 'Hendra Gunawan',
-    tempat_lahir: 'Garut',
-    tanggal_lahir: '1978-04-22',
-    jenis_kelamin: 'Laki-laki',
-    golongan_darah: 'B',
-    agama: 'Islam',
-    no_akta_lahir: '3201-LT-22041978-004',
-    status_ktp: 'Sudah KTP-el',
-    shdk: 'Kepala Keluarga',
-    status_perkawinan: 'Kawin',
-    no_akta_nikah_cerai: 'KUA.10/NK/2003',
-    nama_ayah: 'Gunawan',
-    nama_ibu: 'Neneng',
-    pendidikan_terakhir: 'Sarjana (S1 / D4)',
-    status_sekolah: 'Tidak / Sudah Lulus',
-    pekerjaan: 'Wiraswasta',
-    rentang_penghasilan: '> Rp 5.000.000',
-    status_ekonomi: 'mampu',
-    bansos_pkh: false,
-    bansos_bpnt: false,
-    bansos_blt_desa: false,
-    bpjs_pbi: false,
-    dusun: 'Mekarsari',
-    rw: '02',
-    rt: '01',
-    alamat_detail: 'Jl. Cempaka Indah No. 5',
-    status_tempat_tinggal: 'Milik Sendiri',
-    telepon: '0811-9999-0000',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: false,
-    jenis_disabilitas: 'Tidak Ada',
-    penyakit_kronis: 'Tidak Ada',
-    status_kesehatan_khusus: 'Normal',
-  },
-  {
-    id: 'w-5',
-    nik: '3201016011950005',
-    no_kk: '3201016011950000',
-    nama: 'Dewi Sartika',
-    tempat_lahir: 'Bogor',
-    tanggal_lahir: '1995-11-20',
-    jenis_kelamin: 'Perempuan',
-    golongan_darah: 'O',
-    agama: 'Islam',
-    no_akta_lahir: '3201-LT-20111995-005',
-    status_ktp: 'Sudah KTP-el',
-    shdk: 'Kepala Keluarga',
-    status_perkawinan: 'Cerai Hidup',
-    no_akta_nikah_cerai: 'PA.Cbn/AC/2021/45',
-    nama_ayah: 'Sartika',
-    nama_ibu: 'Rokayah',
-    pendidikan_terakhir: 'SMA/SMK/Sederajat',
-    status_sekolah: 'Tidak / Sudah Lulus',
-    pekerjaan: 'Pedagang',
-    rentang_penghasilan: 'Rp 1.000.000 - Rp 2.500.000',
-    status_ekonomi: 'rentan',
-    bansos_pkh: false,
-    bansos_bpnt: true,
-    bansos_blt_desa: false,
-    bpjs_pbi: true,
-    dusun: 'Mekarsari',
-    rw: '02',
-    rt: '02',
-    alamat_detail: 'Kp. Pasir Honje RT 02',
-    status_tempat_tinggal: 'Sewa / Kontrak',
-    telepon: '0812-7777-6666',
-    status_domisili: 'Penduduk Tetap',
-    status_kependudukan: 'aktif',
-    is_disabilitas: false,
-    jenis_disabilitas: 'Tidak Ada',
-    penyakit_kronis: 'Tidak Ada',
-    status_kesehatan_khusus: 'Normal',
-  },
-];
-
-// Helper normalisasi nomor RT/RW agar '02' dan '2' dianggap sama persis
 export const normalizeWilayah = (val) => {
   if (val === undefined || val === null) return '';
   const trimmed = String(val).trim();
@@ -407,8 +47,8 @@ export const normalizeWilayah = (val) => {
   return isNaN(parsed) ? trimmed.toLowerCase() : String(parsed);
 };
 
-export default function WargaPage() {
-  const { profile } = useAuth();
+export default function WargaPage({ navigateToLayanan }) {
+  const { profile, user, isOnline } = useAuth();
   const { pengaturanDesa, getDusunOptions, getRwOptions, getRtOptions } = useDesa();
 
   const [warga, setWarga] = useState([]);
@@ -421,12 +61,13 @@ export default function WargaPage() {
   const [filterRt, setFilterRt] = useState('all');
   const [filterShdk, setFilterShdk] = useState('all'); // 'all' | 'Kepala Keluarga' | 'Bukan Kepala Keluarga'
   const [filterNoKk, setFilterNoKk] = useState('');
+  const [showAdminFilters, setShowAdminFilters] = useState(false);
   const [showRekapModal, setShowRekapModal] = useState(false);
 
-  const [selectedWargaSurat, setSelectedWargaSurat] = useState(null);
   const [editingWarga, setEditingWarga] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
 
   // Click-to-Detail State
   const [selectedDetailWarga, setSelectedDetailWarga] = useState(null);
@@ -476,62 +117,35 @@ export default function WargaPage() {
   const fetchWarga = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('warga')
-        .select('*')
-        .eq('status_kependudukan', 'aktif')
-        .order('nama', { ascending: true });
+      const { data, error } = await fetchAllRows(() => {
+        let query = supabase
+          .from('warga')
+          .select('*')
+          .eq('status_kependudukan', 'aktif');
 
-      // Filter query Supabase sesuai role pengguna aktif
-      if (profile?.role === 'rt') {
-        if (profile.wilayah_rt) query = query.eq('rt', profile.wilayah_rt);
-        if (profile.wilayah_rw) query = query.eq('rw', profile.wilayah_rw);
-      } else if (profile?.role === 'rw') {
-        if (profile.wilayah_rw) query = query.eq('rw', profile.wilayah_rw);
-      } else if (profile?.role === 'dusun') {
-        if (profile.wilayah_dusun) query = query.eq('dusun', profile.wilayah_dusun);
-      }
-
-      const { data, error } = await query;
-
-      if (!error && data && data.length > 0) {
-        setWarga(data);
-        localStorage.setItem('cached_warga_desa', JSON.stringify(data));
-      } else {
-        // Fallback ke penyimpanan lokal & demo warga
-        const localCached = localStorage.getItem('cached_warga_desa');
-        let allWarga = localCached ? JSON.parse(localCached) : INITIAL_DEMO_WARGA;
-
-        const localImported = JSON.parse(localStorage.getItem('cached_warga_local') || '[]');
-        if (localImported.length > 0) {
-          allWarga = [...localImported, ...allWarga];
-        }
-
-        // Terapkan isolasi wilayah yang ketat sesuai role login
-        let filteredTerritory = allWarga.filter((w) => w.status_kependudukan === 'aktif');
-
+        // Filter query Supabase sesuai role pengguna aktif
         if (profile?.role === 'rt') {
-          filteredTerritory = filteredTerritory.filter(
-            (w) =>
-              normalizeWilayah(w.rt) === normalizeWilayah(profile.wilayah_rt) &&
-              normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
-          );
+          if (profile.wilayah_dusun) query = query.eq('dusun', profile.wilayah_dusun);
+          if (profile.wilayah_rt) query = query.eq('rt', profile.wilayah_rt);
+          if (profile.wilayah_rw) query = query.eq('rw', profile.wilayah_rw);
         } else if (profile?.role === 'rw') {
-          filteredTerritory = filteredTerritory.filter(
-            (w) => normalizeWilayah(w.rw) === normalizeWilayah(profile.wilayah_rw)
-          );
+          if (profile.wilayah_dusun) query = query.eq('dusun', profile.wilayah_dusun);
+          if (profile.wilayah_rw) query = query.eq('rw', profile.wilayah_rw);
         } else if (profile?.role === 'dusun') {
-          filteredTerritory = filteredTerritory.filter(
-            (w) => w.dusun?.trim().toLowerCase() === profile.wilayah_dusun?.trim().toLowerCase()
-          );
+          if (profile.wilayah_dusun) query = query.eq('dusun', profile.wilayah_dusun);
         }
 
-        setWarga(filteredTerritory);
-      }
+        return query.order('nama', { ascending: true }).order('id', { ascending: true });
+      });
+      if (error) throw error;
+      const scoped = filterByProfileScope(data || [], profile);
+      setWarga(scoped);
+      writeUserCache(user?.id, 'warga', scoped);
     } catch (e) {
       console.warn('Gagal fetch warga dari Supabase:', e);
-      const cached = localStorage.getItem('cached_warga_desa');
-      if (cached) setWarga(JSON.parse(cached));
+      const ownCache = readUserCache(user?.id, 'warga', []);
+      const scoped = filterByProfileScope(ownCache, profile);
+      setWarga(scoped);
     } finally {
       setLoading(false);
     }
@@ -550,7 +164,7 @@ export default function WargaPage() {
           fetchWarga();
         }
       )
-      .subscribe();
+      .subscribe((status) => setRealtimeStatus(status));
 
     // 2. Broadcast Channel & Local Event Listener (Untuk Sinkronisasi Seketika Antar Tab / Offline)
     const handleWargaUpdated = () => {
@@ -562,7 +176,7 @@ export default function WargaPage() {
       supabase.removeChannel(realtimeChannel);
       window.removeEventListener('warga-updated', handleWargaUpdated);
     };
-  }, [profile]);
+  }, [profile, user?.id, isOnline]);
 
   // Reset ke halaman 1 ketika pencarian, filter, atau ukuran halaman berubah
   useEffect(() => {
@@ -579,14 +193,15 @@ export default function WargaPage() {
   ]);
 
   const handleDelete = async (id, nama) => {
-    if (!confirm(`Hapus data warga ${nama}?`)) return;
+    if (!confirm(`Hapus permanen data warga ${nama}? Riwayat mutasi dan penerima bansos yang terhubung juga dapat terhapus.`)) return;
     try {
-      await supabase.from('warga').delete().eq('id', id);
+      const { error } = await supabase.from('warga').delete().eq('id', id);
+      if (error) throw error;
 
       // Update state lokal
       const updated = warga.filter((w) => w.id !== id);
       setWarga(updated);
-      localStorage.setItem('cached_warga_desa', JSON.stringify(updated));
+      writeUserCache(user?.id, 'warga', updated);
 
       // Beritahu tab / role lain
       window.dispatchEvent(new Event('warga-updated'));
@@ -594,11 +209,7 @@ export default function WargaPage() {
         setSelectedDetailWarga(null);
       }
     } catch (e) {
-      const updated = warga.filter((w) => w.id !== id);
-      setWarga(updated);
-      if (selectedDetailWarga?.id === id) {
-        setSelectedDetailWarga(null);
-      }
+      alert(`Gagal menghapus warga dari database: ${e.message}`);
     }
   };
 
@@ -713,15 +324,13 @@ export default function WargaPage() {
   const isAdmin = profile?.role === 'admin';
 
   return (
-    <div className="pb-28 max-w-4xl mx-auto animate-fade-in relative">
+    <div className="app-page pb-28 max-w-4xl mx-auto animate-fade-in relative">
       {/* 1. STICKY HEADER: TERKUNCI TETAP DI ATAS SAAT SCROLLING KEBAWAH */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-3.5 pt-3 pb-2.5 border-b border-slate-200/90 shadow-xs space-y-2.5">
+      <div className="warga-sticky-header sticky top-0 z-30 bg-white/95 backdrop-blur-md px-3.5 pt-3 pb-2.5 border-b border-slate-200/90 shadow-xs space-y-2.5">
         {/* Baris 1: Judul Halaman (Full Width, Tidak Terpotong) */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-teal-100 text-teal-800 flex-shrink-0 shadow-2xs">
-              <Users size={18} />
-            </div>
+            <img className="tab-brand-mark" src="/bekasikab.png" alt="Lambang Kabupaten Bekasi" />
             <div>
               <h2 className="text-base sm:text-lg font-black text-slate-800 tracking-tight whitespace-nowrap">
                 Data Kependudukan
@@ -765,13 +374,13 @@ export default function WargaPage() {
         )}
 
         {/* Baris 3: Indikator Realtime Terhubung */}
-        <div className="px-2.5 py-1.5 rounded-xl bg-teal-50/90 border border-teal-100 flex items-center justify-between text-[10px] text-teal-800">
+        <div className={`px-2.5 py-1.5 rounded-xl border flex items-center justify-between text-[10px] ${realtimeStatus === 'SUBSCRIBED' ? 'bg-teal-50/90 border-teal-100 text-teal-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
           <div className="flex items-center gap-1.5 font-semibold truncate">
             <span className="relative flex h-2 w-2 flex-shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              {realtimeStatus === 'SUBSCRIBED' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${realtimeStatus === 'SUBSCRIBED' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
             </span>
-            <span className="truncate">Database Realtime Terhubung ke Semua Role</span>
+            <span className="truncate">Realtime: {realtimeStatus === 'SUBSCRIBED' ? 'terhubung' : realtimeStatus.toLowerCase()}</span>
           </div>
           <button
             type="button"
@@ -817,6 +426,22 @@ export default function WargaPage() {
 
         {/* PANEL FILTER KHUSUS ADMIN (WILAYAH, KK, & KEPALA KELUARGA) */}
         {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setShowAdminFilters((open) => !open)}
+            aria-expanded={showAdminFilters}
+            className="w-full flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-left shadow-xs hover:border-teal-200 transition-colors"
+          >
+            <span className="flex items-center gap-2 text-xs font-bold text-slate-700">
+              <Filter size={15} className="text-teal-700" />
+              Filter wilayah & keluarga
+              {hasActiveFilter && <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] text-teal-800">Aktif</span>}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-500">{showAdminFilters ? 'Sembunyikan' : 'Tampilkan'}</span>
+          </button>
+        )}
+
+        {isAdmin && showAdminFilters && (
           <div className="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-3 animate-fade-in">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="text-[11px] font-black text-slate-700 flex items-center gap-1.5 uppercase tracking-wider">
@@ -1363,11 +988,11 @@ export default function WargaPage() {
                     </strong>
                   </div>
 
-                  {selectedDetailWarga.no_akta_nikah && (
+                  {selectedDetailWarga.no_akta_nikah_cerai && (
                     <div className="col-span-2 pt-1 border-t border-slate-200/60">
                       <span className="text-[10px] text-slate-400 block font-medium">No. Buku / Akta Nikah / Perceraian:</span>
                       <strong className="text-slate-800 font-mono text-[10.5px]">
-                        {selectedDetailWarga.no_akta_nikah}
+                        {selectedDetailWarga.no_akta_nikah_cerai}
                       </strong>
                     </div>
                   )}
@@ -1385,7 +1010,7 @@ export default function WargaPage() {
                   <div>
                     <span className="text-[10px] text-slate-400 block font-medium">Pendidikan Terakhir:</span>
                     <strong className="text-slate-800 font-semibold block text-[11px]">
-                      {selectedDetailWarga.pendidikan || 'SMA/Sederajat'}
+                      {selectedDetailWarga.pendidikan_terakhir || selectedDetailWarga.pendidikan || 'SMA/Sederajat'}
                     </strong>
                     <span className="text-[9.5px] text-slate-400 block mt-0.5">
                       Status: {selectedDetailWarga.status_sekolah || 'Tidak Sekolah'}
@@ -1402,7 +1027,7 @@ export default function WargaPage() {
                   <div>
                     <span className="text-[10px] text-slate-400 block font-medium">Rentang Penghasilan:</span>
                     <strong className="text-slate-800 font-medium block text-[11px]">
-                      {selectedDetailWarga.penghasilan || 'Rp 1.000.000 - Rp 2.500.000'}
+                      {selectedDetailWarga.rentang_penghasilan || selectedDetailWarga.penghasilan || 'Rp 1.000.000 - Rp 2.500.000'}
                     </strong>
                   </div>
 
@@ -1427,35 +1052,35 @@ export default function WargaPage() {
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
-                      selectedDetailWarga.bansos_pkh === 'Ya'
+                      (selectedDetailWarga.bansos_pkh === true || selectedDetailWarga.bansos_pkh === 'Ya')
                         ? 'bg-rose-50 text-rose-700 border-rose-200'
                         : 'bg-slate-100 text-slate-400 border-slate-200'
                     }`}>
-                      PKH: {selectedDetailWarga.bansos_pkh === 'Ya' ? 'Penerima' : 'Tidak'}
+                      PKH: {selectedDetailWarga.bansos_pkh === true || selectedDetailWarga.bansos_pkh === 'Ya' ? 'Penerima' : 'Tidak'}
                     </span>
 
                     <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
-                      selectedDetailWarga.bansos_bpnt === 'Ya'
+                      (selectedDetailWarga.bansos_bpnt === true || selectedDetailWarga.bansos_bpnt === 'Ya')
                         ? 'bg-amber-50 text-amber-700 border-amber-200'
                         : 'bg-slate-100 text-slate-400 border-slate-200'
                     }`}>
-                      BPNT/Sembako: {selectedDetailWarga.bansos_bpnt === 'Ya' ? 'Penerima' : 'Tidak'}
+                      BPNT/Sembako: {selectedDetailWarga.bansos_bpnt === true || selectedDetailWarga.bansos_bpnt === 'Ya' ? 'Penerima' : 'Tidak'}
                     </span>
 
                     <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
-                      selectedDetailWarga.bansos_blt === 'Ya'
+                      (selectedDetailWarga.bansos_blt_desa === true || selectedDetailWarga.bansos_blt_desa === 'Ya' || selectedDetailWarga.bansos_blt === 'Ya')
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : 'bg-slate-100 text-slate-400 border-slate-200'
                     }`}>
-                      BLT Desa: {selectedDetailWarga.bansos_blt === 'Ya' ? 'Penerima' : 'Tidak'}
+                      BLT Desa: {selectedDetailWarga.bansos_blt_desa === true || selectedDetailWarga.bansos_blt_desa === 'Ya' || selectedDetailWarga.bansos_blt === 'Ya' ? 'Penerima' : 'Tidak'}
                     </span>
 
                     <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
-                      selectedDetailWarga.bansos_bpjs_pbi === 'Ya'
+                      (selectedDetailWarga.bpjs_pbi === true || selectedDetailWarga.bpjs_pbi === 'Ya' || selectedDetailWarga.bansos_bpjs_pbi === 'Ya')
                         ? 'bg-teal-50 text-teal-700 border-teal-200'
                         : 'bg-slate-100 text-slate-400 border-slate-200'
                     }`}>
-                      BPJS PBI: {selectedDetailWarga.bansos_bpjs_pbi === 'Ya' ? 'Penerima' : 'Tidak'}
+                      BPJS PBI: {selectedDetailWarga.bpjs_pbi === true || selectedDetailWarga.bpjs_pbi === 'Ya' || selectedDetailWarga.bansos_bpjs_pbi === 'Ya' ? 'Penerima' : 'Tidak'}
                     </span>
                   </div>
                 </div>
@@ -1520,14 +1145,14 @@ export default function WargaPage() {
                     <div>
                       <span className="text-[9.5px] text-slate-400 block font-medium">No. Telepon / WhatsApp:</span>
                       <strong className="text-slate-800 font-mono text-[11px]">
-                        {selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp || '-'}
+                        {selectedDetailWarga.telepon || selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp || '-'}
                       </strong>
                     </div>
                   </div>
 
-                  {(selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp) && (
+                  {(selectedDetailWarga.telepon || selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp) && (
                     <a
-                      href={`https://wa.me/${(selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp).replace(/^0/, '62').replace(/[^0-9]/g, '')}`}
+                      href={`https://wa.me/${(selectedDetailWarga.telepon || selectedDetailWarga.no_telepon || selectedDetailWarga.no_hp).replace(/^0/, '62').replace(/[^0-9]/g, '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-sm transition-all"
@@ -1550,25 +1175,25 @@ export default function WargaPage() {
                   <div>
                     <span className="text-[10px] text-slate-400 block font-medium">Status Khusus / Posyandu:</span>
                     <span className={`inline-block text-[10px] px-2 py-0.5 rounded-md font-bold mt-0.5 ${
-                      selectedDetailWarga.status_khusus === 'Balita (0-59 bulan)'
+                      (selectedDetailWarga.status_kesehatan_khusus || selectedDetailWarga.status_khusus) === 'Balita (0-59 bulan)'
                         ? 'bg-purple-100 text-purple-800'
-                        : selectedDetailWarga.status_khusus === 'Ibu Hamil'
+                        : (selectedDetailWarga.status_kesehatan_khusus || selectedDetailWarga.status_khusus) === 'Ibu Hamil'
                         ? 'bg-pink-100 text-pink-800'
-                        : selectedDetailWarga.status_khusus === 'Ibu Menyusui'
+                        : (selectedDetailWarga.status_kesehatan_khusus || selectedDetailWarga.status_khusus) === 'Ibu Menyusui'
                         ? 'bg-rose-100 text-rose-800'
-                        : selectedDetailWarga.status_khusus === 'Lansia'
+                        : (selectedDetailWarga.status_kesehatan_khusus || selectedDetailWarga.status_khusus) === 'Lansia'
                         ? 'bg-indigo-100 text-indigo-800'
                         : 'bg-slate-200/80 text-slate-700'
                     }`}>
-                      {selectedDetailWarga.status_khusus || 'Normal'}
+                      {selectedDetailWarga.status_kesehatan_khusus || selectedDetailWarga.status_khusus || 'Normal'}
                     </span>
                   </div>
 
                   <div>
                     <span className="text-[10px] text-slate-400 block font-medium">Penyandang Disabilitas:</span>
                     <strong className="text-slate-800 font-semibold block text-[11px]">
-                      {selectedDetailWarga.disabilitas && selectedDetailWarga.disabilitas !== 'Tidak Ada'
-                        ? `Ya (${selectedDetailWarga.disabilitas})`
+                      {(selectedDetailWarga.is_disabilitas || (selectedDetailWarga.jenis_disabilitas && selectedDetailWarga.jenis_disabilitas !== 'Tidak Ada'))
+                        ? `Ya (${selectedDetailWarga.jenis_disabilitas || selectedDetailWarga.disabilitas})`
                         : 'Tidak Ada'}
                     </strong>
                   </div>
@@ -1585,16 +1210,16 @@ export default function WargaPage() {
 
             {/* Action Buttons Modal Detail */}
             <div className="mt-5 pt-3 border-t border-slate-100 flex flex-col sm:flex-row gap-2">
-              <button
+              {isAdmin && <button
                 onClick={() => {
-                  setSelectedWargaSurat(selectedDetailWarga);
                   setSelectedDetailWarga(null);
+                  navigateToLayanan?.('surat');
                 }}
                 className="flex-1 py-2.5 px-3 bg-teal-700 hover:bg-teal-800 active:scale-[0.98] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-teal-900/15 transition-all"
               >
                 <FileText size={15} />
-                <span>Cetak Surat Pengantar PDF</span>
-              </button>
+                <span>Buka Layanan Surat</span>
+              </button>}
 
               {isAdmin && (
                 <div className="flex gap-2">
@@ -1632,15 +1257,6 @@ export default function WargaPage() {
         </div>
       )}
 
-      {/* Modal Cetak Surat Pengantar */}
-      {selectedWargaSurat && (
-        <SuratModal
-          warga={selectedWargaSurat}
-          userProfile={profile}
-          onClose={() => setSelectedWargaSurat(null)}
-        />
-      )}
-
       {/* Modal Tambah Warga Baru (Admin) */}
       {showAddModal && (
         <WargaFormModal
@@ -1665,7 +1281,7 @@ export default function WargaPage() {
           onClose={() => setShowRekapModal(false)}
           allWarga={warga}
           filteredWarga={filtered}
-          namaDesa={pengaturanDesa?.nama_desa || 'Sukamaju'}
+          namaDesa={pengaturanDesa?.nama_desa || 'Nama Desa'}
         />
       )}
     </div>

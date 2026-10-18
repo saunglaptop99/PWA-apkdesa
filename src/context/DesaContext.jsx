@@ -4,39 +4,44 @@ import { supabase } from '../lib/supabaseClient';
 const DesaContext = createContext();
 
 const DEFAULT_PENGATURAN = {
-  nama_desa: 'Sukamaju',
-  nama_kecamatan: 'Sukaraja',
-  nama_kabupaten: 'Bogor',
-  nama_kepala_desa: 'H. Ahmad Dahlan, S.E.',
-  alamat_kantor: 'Jl. Raya Desa Sukamaju No. 01',
-  kontak_desa: '0812-3456-7890',
+  nama_desa: '',
+  nama_kecamatan: '',
+  nama_kabupaten: '',
+  nama_kepala_desa: '',
+  alamat_kantor: '',
+  kontak_desa: '',
 };
 
-// Default Master Wilayah Dusun, RW, RT
-export const DEFAULT_WILAYAH_DESA = [
-  { dusun: 'Sukamaju', rw: '01', rt: '01' },
-  { dusun: 'Sukamaju', rw: '01', rt: '02' },
-  { dusun: 'Sukamaju', rw: '01', rt: '03' },
-  { dusun: 'Sukamaju', rw: '01', rt: '04' },
-  { dusun: 'Sukamaju', rw: '02', rt: '01' },
-  { dusun: 'Sukamaju', rw: '02', rt: '02' },
-  { dusun: 'Sukamaju', rw: '02', rt: '03' },
-  { dusun: 'Mekarsari', rw: '01', rt: '01' },
-  { dusun: 'Mekarsari', rw: '01', rt: '02' },
-  { dusun: 'Mekarsari', rw: '02', rt: '01' },
-  { dusun: 'Mekarsari', rw: '02', rt: '02' },
-  { dusun: 'Mekarsari', rw: '02', rt: '03' },
-];
+export const DEFAULT_WILAYAH_DESA = [];
+
+const readLocalJson = (key, fallback) => {
+  try {
+    const cached = localStorage.getItem(key);
+    if (!cached) return fallback;
+    const parsed = JSON.parse(cached);
+    if (Array.isArray(fallback)) return Array.isArray(parsed) ? parsed : fallback;
+    if (fallback && typeof fallback === 'object') return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+    return parsed;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeLocalJson = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.warn('Cache lokal tidak dapat diperbarui:', error);
+  }
+};
 
 export const DesaProvider = ({ children }) => {
   const [pengaturanDesa, setPengaturanDesa] = useState(() => {
-    const cached = localStorage.getItem('cached_pengaturan_desa');
-    return cached ? JSON.parse(cached) : DEFAULT_PENGATURAN;
+    return readLocalJson('cached_pengaturan_desa', DEFAULT_PENGATURAN);
   });
 
   const [wilayahList, setWilayahList] = useState(() => {
-    const cached = localStorage.getItem('cached_wilayah_desa');
-    return cached ? JSON.parse(cached) : DEFAULT_WILAYAH_DESA;
+    return readLocalJson('cached_wilayah_desa', DEFAULT_WILAYAH_DESA);
   });
 
   const [loading, setLoading] = useState(false);
@@ -52,7 +57,7 @@ export const DesaProvider = ({ children }) => {
 
       if (!error && data) {
         setPengaturanDesa(data);
-        localStorage.setItem('cached_pengaturan_desa', JSON.stringify(data));
+        writeLocalJson('cached_pengaturan_desa', data);
       }
     } catch (err) {
       console.warn('Gagal memuat pengaturan desa dari server:', err);
@@ -71,11 +76,18 @@ export const DesaProvider = ({ children }) => {
         .order('rt');
 
       // 2. Ambil juga dari data warga yang ada di database agar sinkron 100%
-      const { data: wargaData } = await supabase
+      const { data: wargaData, error: wargaError } = await supabase
         .from('warga')
         .select('dusun, rw, rt');
 
-      const combined = [...DEFAULT_WILAYAH_DESA];
+      // Keep the last known list when both server sources are unavailable. This
+      // prevents a transient/network or RLS error from erasing cached dropdowns.
+      if (wErr && wargaError) {
+        console.warn('Gagal memuat master wilayah dan data warga:', wErr.message, wargaError.message);
+        return;
+      }
+
+      const combined = [];
 
       if (!wErr && wData && wData.length > 0) {
         combined.push(...wData);
@@ -95,19 +107,25 @@ export const DesaProvider = ({ children }) => {
       // Hapus duplikasi berdasarkan kombinasi dusun-rw-rt
       const uniqueMap = new Map();
       combined.forEach((item) => {
-        const key = `${item.dusun.toLowerCase()}-${String(item.rw).padStart(2, '0')}-${String(item.rt).padStart(2, '0')}`;
+        if (!item.dusun || !item.rw || !item.rt) return;
+        const dusun = String(item.dusun).trim();
+        const rw = String(item.rw).padStart(2, '0');
+        const rt = String(item.rt).padStart(2, '0');
+        const key = `${dusun.toLowerCase()}-${rw}-${rt}`;
         if (!uniqueMap.has(key)) {
           uniqueMap.set(key, {
-            dusun: item.dusun,
-            rw: String(item.rw).padStart(2, '0'),
-            rt: String(item.rt).padStart(2, '0'),
+            dusun,
+            rw,
+            rt,
           });
         }
       });
 
-      const uniqueList = Array.from(uniqueMap.values());
+      const uniqueList = Array.from(uniqueMap.values()).sort((a, b) =>
+        a.dusun.localeCompare(b.dusun, 'id') || a.rw.localeCompare(b.rw, 'id') || a.rt.localeCompare(b.rt, 'id')
+      );
       setWilayahList(uniqueList);
-      localStorage.setItem('cached_wilayah_desa', JSON.stringify(uniqueList));
+      writeLocalJson('cached_wilayah_desa', uniqueList);
     } catch (err) {
       console.warn('Gagal fetch master wilayah:', err);
     }
@@ -126,7 +144,7 @@ export const DesaProvider = ({ children }) => {
         (payload) => {
           if (payload.new) {
             setPengaturanDesa(payload.new);
-            localStorage.setItem('cached_pengaturan_desa', JSON.stringify(payload.new));
+            writeLocalJson('cached_pengaturan_desa', payload.new);
           }
         }
       )
@@ -174,14 +192,14 @@ export const DesaProvider = ({ children }) => {
       updated_at: new Date().toISOString(),
     };
 
-    setPengaturanDesa(updated);
-    localStorage.setItem('cached_pengaturan_desa', JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('pengaturan-desa-updated', { detail: updated }));
-
     try {
-      await supabase.from('pengaturan_desa').upsert(updated, { onConflict: 'id' });
+      const { error } = await supabase.from('pengaturan_desa').upsert(updated, { onConflict: 'id' });
+      if (error) throw error;
+      setPengaturanDesa(updated);
+      writeLocalJson('cached_pengaturan_desa', updated);
+      window.dispatchEvent(new CustomEvent('pengaturan-desa-updated', { detail: updated }));
     } catch (err) {
-      console.warn('Gagal update pengaturan desa:', err);
+      throw new Error(`Gagal menyimpan pengaturan desa ke server: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -195,7 +213,6 @@ export const DesaProvider = ({ children }) => {
 
     const newItem = { dusun: formattedDusun, rw: formattedRw, rt: formattedRt };
 
-    // Update lokal
     const exists = wilayahList.some(
       (w) =>
         w.dusun.toLowerCase() === formattedDusun.toLowerCase() &&
@@ -203,16 +220,8 @@ export const DesaProvider = ({ children }) => {
         String(w.rt).padStart(2, '0') === formattedRt
     );
 
-    if (!exists) {
-      const updated = [...wilayahList, newItem];
-      setWilayahList(updated);
-      localStorage.setItem('cached_wilayah_desa', JSON.stringify(updated));
-      window.dispatchEvent(new Event('wilayah-updated'));
-    }
-
-    // Simpan ke Supabase
     try {
-      await supabase.from('wilayah_desa').upsert(
+      const { error } = await supabase.from('wilayah_desa').upsert(
         [
           {
             dusun: formattedDusun,
@@ -222,8 +231,17 @@ export const DesaProvider = ({ children }) => {
         ],
         { onConflict: 'dusun,rw,rt' }
       );
+      if (error) throw error;
+      if (!exists) {
+        const updated = [...wilayahList, newItem];
+        setWilayahList(updated);
+        writeLocalJson('cached_wilayah_desa', updated);
+      }
+      // Notify all forms in this tab immediately; the database change also
+      // propagates to other sessions through the Realtime subscription.
+      window.dispatchEvent(new Event('wilayah-updated'));
     } catch (err) {
-      console.warn('Gagal simpan wilayah ke DB:', err);
+      throw new Error(`Gagal menyimpan wilayah ke server: ${err.message}`);
     }
   };
 
@@ -237,19 +255,18 @@ export const DesaProvider = ({ children }) => {
         )
     );
 
-    setWilayahList(updated);
-    localStorage.setItem('cached_wilayah_desa', JSON.stringify(updated));
-    window.dispatchEvent(new Event('wilayah-updated'));
-
     try {
-      await supabase
-        .from('wilayah_desa')
-        .delete()
-        .eq('dusun', dusun)
-        .eq('rw', String(rw).padStart(2, '0'))
-        .eq('rt', String(rt).padStart(2, '0'));
+      const { error } = await supabase.rpc('delete_wilayah', {
+        p_dusun: dusun.trim(),
+        p_rw: String(rw).padStart(2, '0'),
+        p_rt: String(rt).padStart(2, '0'),
+      });
+      if (error) throw error;
+      setWilayahList(updated);
+      writeLocalJson('cached_wilayah_desa', updated);
+      window.dispatchEvent(new Event('wilayah-updated'));
     } catch (err) {
-      console.warn('Gagal hapus wilayah di DB:', err);
+      throw new Error(`Gagal menghapus wilayah dari server: ${err.message}`);
     }
   };
 
@@ -257,36 +274,23 @@ export const DesaProvider = ({ children }) => {
     if (!oldDusun || !newDusun || oldDusun.trim().toLowerCase() === newDusun.trim().toLowerCase()) return;
     const formattedNew = newDusun.trim();
 
-    // 1. Update local state
-    const updated = wilayahList.map((w) =>
-      w.dusun.toLowerCase() === oldDusun.trim().toLowerCase()
-        ? { ...w, dusun: formattedNew }
-        : w
-    );
-    setWilayahList(updated);
-    localStorage.setItem('cached_wilayah_desa', JSON.stringify(updated));
-    window.dispatchEvent(new Event('wilayah-updated'));
-
-    // 2. Update Supabase wilayah_desa
     try {
-      await supabase
-        .from('wilayah_desa')
-        .update({ dusun: formattedNew })
-        .eq('dusun', oldDusun.trim());
+      const { error } = await supabase.rpc('rename_dusun', {
+        p_old_dusun: oldDusun.trim(),
+        p_new_dusun: formattedNew,
+      });
+      if (error) throw error;
 
-      // Update tabel warga yang terkait
-      await supabase
-        .from('warga')
-        .update({ dusun: formattedNew })
-        .eq('dusun', oldDusun.trim());
-
-      // Update profil aparat terkait
-      await supabase
-        .from('profiles')
-        .update({ wilayah_dusun: formattedNew })
-        .eq('wilayah_dusun', oldDusun.trim());
+      const updated = wilayahList.map((w) =>
+        w.dusun.toLowerCase() === oldDusun.trim().toLowerCase()
+          ? { ...w, dusun: formattedNew }
+          : w
+      );
+      setWilayahList(updated);
+      writeLocalJson('cached_wilayah_desa', updated);
+      window.dispatchEvent(new Event('wilayah-updated'));
     } catch (err) {
-      console.warn('Gagal update nama dusun di DB:', err);
+      throw new Error(`Gagal mengganti nama dusun di server: ${err.message}`);
     }
   };
 
@@ -295,24 +299,22 @@ export const DesaProvider = ({ children }) => {
     const updated = wilayahList.filter(
       (w) => w.dusun.toLowerCase() !== dusunName.trim().toLowerCase()
     );
-    setWilayahList(updated);
-    localStorage.setItem('cached_wilayah_desa', JSON.stringify(updated));
-    window.dispatchEvent(new Event('wilayah-updated'));
 
     try {
-      await supabase
-        .from('wilayah_desa')
-        .delete()
-        .eq('dusun', dusunName.trim());
+      const { error } = await supabase.rpc('delete_dusun', { p_dusun: dusunName.trim() });
+      if (error) throw error;
+      setWilayahList(updated);
+      writeLocalJson('cached_wilayah_desa', updated);
+      window.dispatchEvent(new Event('wilayah-updated'));
     } catch (err) {
-      console.warn('Gagal hapus dusun di DB:', err);
+      throw new Error(`Gagal menghapus dusun dari server: ${err.message}`);
     }
   };
 
   // Helper fungsi untuk dropdown Dusun, RW, dan RT
   const getDusunOptions = () => {
     const list = Array.from(new Set(wilayahList.map((w) => w.dusun))).filter(Boolean);
-    return list.length > 0 ? list : ['Sukamaju', 'Mekarsari'];
+    return list;
   };
 
   const getRwOptions = (selectedDusun) => {
@@ -325,7 +327,7 @@ export const DesaProvider = ({ children }) => {
     const rws = Array.from(new Set(filtered.map((w) => String(w.rw).padStart(2, '0'))))
       .filter(Boolean)
       .sort();
-    return rws.length > 0 ? rws : ['01', '02', '03', '04', '05'];
+    return rws;
   };
 
   const getRtOptions = (selectedDusun, selectedRw) => {
@@ -343,7 +345,7 @@ export const DesaProvider = ({ children }) => {
     const rts = Array.from(new Set(filtered.map((w) => String(w.rt).padStart(2, '0'))))
       .filter(Boolean)
       .sort();
-    return rts.length > 0 ? rts : ['01', '02', '03', '04', '05', '06', '07', '08'];
+    return rts;
   };
 
   return (

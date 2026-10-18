@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import BrandPageHeader from '../components/common/BrandPageHeader';
 import { useAuth } from '../context/AuthContext';
 import { useDesa } from '../context/DesaContext';
 import {
@@ -15,16 +16,40 @@ import {
   X,
   Phone,
   MapPin,
-  Lock,
-  Eye,
-  EyeOff,
   FolderTree,
   ChevronRight,
   Layers,
+  Activity,
+  RefreshCw,
+  Clock3,
 } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+
+const wilayahSlug = (value) => String(value || '')
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-|-$/g, '');
+
+const makeAparatUsername = (role, wilayah) => {
+  const dusun = wilayahSlug(wilayah.dusun);
+  const rw = String(wilayah.rw || '').padStart(2, '0');
+  const rt = String(wilayah.rt || '').padStart(2, '0');
+  if (role === 'rt') return dusun && rw && rt ? `rt_${dusun}_${rw}_${rt}` : '';
+  if (role === 'rw') return dusun && rw ? `rw_${dusun}_${rw}` : '';
+  if (role === 'dusun') return dusun ? `kadus_${dusun}` : '';
+  return '';
+};
+
+const auditActionLabel = (action) => ({
+  INSERT: 'Data ditambahkan', UPDATE: 'Data diperbarui', DELETE: 'Data dihapus',
+  APARAT_CREATE: 'Akun aparat dibuat', APARAT_UPDATE: 'Profil aparat diperbarui',
+  APARAT_DELETE: 'Akun aparat dihapus', PIN_RESET: 'PIN aparat direset',
+}[action] || action);
 
 export default function AdminPanelPage() {
-  const { aparatList, addAparat, updateAparat, deleteAparat, resetPinAparat } = useAuth();
+  const { aparatList, addAparat, updateAparat, deleteAparat } = useAuth();
   const {
     pengaturanDesa,
     updatePengaturanDesa,
@@ -43,28 +68,48 @@ export default function AdminPanelPage() {
 
   // Form Pengaturan Desa
   const [desaForm, setDesaForm] = useState({
-    nama_desa: pengaturanDesa?.nama_desa || 'Sukamaju',
-    nama_kecamatan: pengaturanDesa?.nama_kecamatan || 'Sukaraja',
-    nama_kabupaten: pengaturanDesa?.nama_kabupaten || 'Bogor',
-    nama_kepala_desa: pengaturanDesa?.nama_kepala_desa || 'H. Ahmad Dahlan, S.E.',
-    alamat_kantor: pengaturanDesa?.alamat_kantor || 'Jl. Raya Desa Sukamaju No. 01',
-    kontak_desa: pengaturanDesa?.kontak_desa || '0812-3456-7890',
+    nama_desa: pengaturanDesa?.nama_desa || '',
+    nama_kecamatan: pengaturanDesa?.nama_kecamatan || '',
+    nama_kabupaten: pengaturanDesa?.nama_kabupaten || '',
+    nama_kepala_desa: pengaturanDesa?.nama_kepala_desa || '',
+    alamat_kantor: pengaturanDesa?.alamat_kantor || '',
+    kontak_desa: pengaturanDesa?.kontak_desa || '',
   });
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState('');
+  const [auditRefreshKey, setAuditRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (activeTab !== 'aktivitas') return undefined;
+    let mounted = true;
+    const loadAuditLogs = async () => {
+      setAuditLoading(true);
+      const { data, error } = await supabase.from('audit_logs').select('id,actor_name,actor_role,action,entity,record_id,changed_fields,created_at').order('created_at', { ascending: false }).limit(100);
+      if (!mounted) return;
+      if (error) setAuditError(error.message);
+      else { setAuditError(''); setAuditLogs(data || []); }
+      setAuditLoading(false);
+    };
+    loadAuditLogs();
+    const channel = supabase.channel('admin-audit-logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, loadAuditLogs).subscribe();
+    return () => { mounted = false; supabase.removeChannel(channel); };
+  }, [activeTab, auditRefreshKey]);
 
   // Modal Aparat Form
   const [showAparatModal, setShowAparatModal] = useState(false);
   const [editingAparat, setEditingAparat] = useState(null);
 
   const dusunList = getDusunOptions();
-  const initialDusun = dusunList[0] || 'Sukamaju';
-  const initialRw = getRwOptions(initialDusun)[0] || '01';
-  const initialRt = getRtOptions(initialDusun, initialRw)[0] || '01';
+  const initialDusun = dusunList[0] || '';
+  const initialRw = getRwOptions(initialDusun)[0] || '';
+  const initialRt = getRtOptions(initialDusun, initialRw)[0] || '';
 
   const [aparatForm, setAparatForm] = useState({
     nama_lengkap: '',
     username: '',
-    pin: '123456',
+    pin: '',
     role: 'rt',
     jabatan: '',
     wilayah_dusun: initialDusun,
@@ -73,7 +118,6 @@ export default function AdminPanelPage() {
     telepon: '',
   });
 
-  const [revealedPins, setRevealedPins] = useState({});
 
   // Modal Tambah Wilayah (Dusun / RW / RT)
   const [showWilayahModal, setShowWilayahModal] = useState(false);
@@ -87,26 +131,37 @@ export default function AdminPanelPage() {
   const rwList = getRwOptions(aparatForm.wilayah_dusun);
   const rtList = getRtOptions(aparatForm.wilayah_dusun, aparatForm.wilayah_rw);
 
-  const toggleRevealPin = (id) => {
-    setRevealedPins((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  useEffect(() => {
+    setDesaForm({
+      nama_desa: pengaturanDesa?.nama_desa || '',
+      nama_kecamatan: pengaturanDesa?.nama_kecamatan || '',
+      nama_kabupaten: pengaturanDesa?.nama_kabupaten || '',
+      nama_kepala_desa: pengaturanDesa?.nama_kepala_desa || '',
+      alamat_kantor: pengaturanDesa?.alamat_kantor || '',
+      kontak_desa: pengaturanDesa?.kontak_desa || '',
+    });
+  }, [pengaturanDesa]);
 
   const handleSaveDesa = async (e) => {
     e.preventDefault();
-    await updatePengaturanDesa(desaForm);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    try {
+      await updatePengaturanDesa(desaForm);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   const openAddAparat = () => {
     setEditingAparat(null);
-    const d = dusunList[0] || 'Sukamaju';
-    const r = getRwOptions(d)[0] || '01';
-    const t = getRtOptions(d, r)[0] || '01';
+    const d = dusunList[0] || '';
+    const r = getRwOptions(d)[0] || '';
+    const t = getRtOptions(d, r)[0] || '';
     setAparatForm({
       nama_lengkap: '',
-      username: `rt${t}_${r}`,
-      pin: '123456',
+      username: makeAparatUsername('rt', { dusun: d, rw: r, rt: t }),
+      pin: '',
       role: 'rt',
       jabatan: `Ketua RT ${t} / RW ${r}`,
       wilayah_dusun: d,
@@ -122,7 +177,7 @@ export default function AdminPanelPage() {
     setAparatForm({
       nama_lengkap: aparat.nama_lengkap,
       username: aparat.username || '',
-      pin: aparat.pin || '123456',
+      pin: '',
       role: aparat.role || 'rt',
       jabatan: aparat.jabatan || '',
       wilayah_dusun: aparat.wilayah_dusun || initialDusun,
@@ -139,13 +194,13 @@ export default function AdminPanelPage() {
 
     if (newRole === 'rt') {
       newJabatan = `Ketua RT ${aparatForm.wilayah_rt} / RW ${aparatForm.wilayah_rw}`;
-      newUsername = `rt${aparatForm.wilayah_rt}_${aparatForm.wilayah_rw}`;
+      newUsername = makeAparatUsername('rt', { dusun: aparatForm.wilayah_dusun, rw: aparatForm.wilayah_rw, rt: aparatForm.wilayah_rt });
     } else if (newRole === 'rw') {
       newJabatan = `Ketua RW ${aparatForm.wilayah_rw}`;
-      newUsername = `rw${aparatForm.wilayah_rw}`;
+      newUsername = makeAparatUsername('rw', { dusun: aparatForm.wilayah_dusun, rw: aparatForm.wilayah_rw });
     } else if (newRole === 'dusun') {
       newJabatan = `Kepala Dusun ${aparatForm.wilayah_dusun}`;
-      newUsername = `kadus_${aparatForm.wilayah_dusun.toLowerCase()}`;
+      newUsername = makeAparatUsername('dusun', { dusun: aparatForm.wilayah_dusun });
     } else if (newRole === 'admin') {
       newJabatan = `Administrator / Sekretaris Desa`;
       newUsername = `admin_${Math.floor(10 + Math.random() * 90)}`;
@@ -170,13 +225,13 @@ export default function AdminPanelPage() {
 
     if (aparatForm.role === 'rt') {
       newJabatan = `Ketua RT ${newRt} / RW ${newRw}`;
-      newUsername = `rt${newRt}_${newRw}`;
+      newUsername = makeAparatUsername('rt', { dusun: newDusun, rw: newRw, rt: newRt });
     } else if (aparatForm.role === 'rw') {
       newJabatan = `Ketua RW ${newRw}`;
-      newUsername = `rw${newRw}`;
+      newUsername = makeAparatUsername('rw', { dusun: newDusun, rw: newRw });
     } else if (aparatForm.role === 'dusun') {
       newJabatan = `Kepala Dusun ${newDusun}`;
-      newUsername = `kadus_${newDusun.toLowerCase()}`;
+      newUsername = makeAparatUsername('dusun', { dusun: newDusun });
     }
 
     setAparatForm((prev) => ({
@@ -198,10 +253,10 @@ export default function AdminPanelPage() {
 
     if (aparatForm.role === 'rt') {
       newJabatan = `Ketua RT ${newRt} / RW ${newRw}`;
-      newUsername = `rt${newRt}_${newRw}`;
+      newUsername = makeAparatUsername('rt', { dusun: aparatForm.wilayah_dusun, rw: newRw, rt: newRt });
     } else if (aparatForm.role === 'rw') {
       newJabatan = `Ketua RW ${newRw}`;
-      newUsername = `rw${newRw}`;
+      newUsername = makeAparatUsername('rw', { dusun: aparatForm.wilayah_dusun, rw: newRw });
     }
 
     setAparatForm((prev) => ({
@@ -219,7 +274,7 @@ export default function AdminPanelPage() {
 
     if (aparatForm.role === 'rt') {
       newJabatan = `Ketua RT ${newRt} / RW ${aparatForm.wilayah_rw}`;
-      newUsername = `rt${newRt}_${aparatForm.wilayah_rw}`;
+      newUsername = makeAparatUsername('rt', { dusun: aparatForm.wilayah_dusun, rw: aparatForm.wilayah_rw, rt: newRt });
     }
 
     setAparatForm((prev) => ({
@@ -236,6 +291,19 @@ export default function AdminPanelPage() {
       alert('Nama lengkap aparat wajib diisi.');
       return;
     }
+    if ((!editingAparat || !editingAparat.user_id) && !/^\d{6}$/.test(aparatForm.pin)) {
+      alert('Profil ini memerlukan PIN baru tepat 6 angka untuk diaktifkan.');
+      return;
+    }
+    if (aparatForm.pin && !/^\d{6}$/.test(aparatForm.pin)) {
+      alert('PIN harus tepat 6 angka.');
+      return;
+    }
+    if (editingAparat && aparatForm.pin && !confirm(`Reset PIN untuk ${editingAparat.nama_lengkap}? PIN lama langsung tidak berlaku. Sampaikan PIN baru secara pribadi kepada aparat.`)) return;
+    if (aparatForm.role !== 'admin' && (!aparatForm.wilayah_dusun || !aparatForm.wilayah_rw || (aparatForm.role === 'rt' && !aparatForm.wilayah_rt))) {
+      alert('Atur master wilayah terlebih dahulu, lalu pilih dusun/RW/RT untuk aparat ini.');
+      return;
+    }
 
     const payload = {
       ...aparatForm,
@@ -247,34 +315,22 @@ export default function AdminPanelPage() {
       wilayah_dusun: aparatForm.role !== 'admin' ? aparatForm.wilayah_dusun : null,
     };
 
-    if (editingAparat) {
-      await updateAparat(editingAparat.id, payload);
-      alert('Data aparat berhasil diperbarui di database!');
-    } else {
-      await addAparat(payload);
-      alert(
-        `Aparat baru berhasil dibuat di database! Akun: ${payload.username}, PIN Login: ${payload.pin}`
-      );
+    try {
+      if (editingAparat) await updateAparat(editingAparat.id, payload, aparatForm.pin);
+      else await addAparat(payload, aparatForm.pin);
+      alert(aparatForm.pin && editingAparat ? 'PIN aparat berhasil direset. PIN lama sudah diganti; sampaikan PIN baru secara pribadi.' : 'Akun aparat berhasil disimpan. Sampaikan PIN secara langsung kepada aparat tersebut.');
+      setShowAparatModal(false);
+    } catch (error) {
+      alert(`Gagal menyimpan profil aparat: ${error.message}`);
     }
-
-    setShowAparatModal(false);
   };
 
   const handleDeleteAparat = async (id, nama) => {
     if (confirm(`Yakin ingin menghapus aparat "${nama}"? Akun ini tidak akan dapat login lagi.`)) {
-      await deleteAparat(id);
+      try { await deleteAparat(id); } catch (error) { alert(`Gagal menghapus profil aparat: ${error.message}`); }
     }
   };
 
-  const handleQuickResetPin = async (id, nama) => {
-    const newPin = prompt(`Masukkan 6 digit PIN baru untuk ${nama}:`, '123456');
-    if (newPin && newPin.length === 6) {
-      await resetPinAparat(id, newPin);
-      alert(`PIN untuk ${nama} berhasil direset menjadi: ${newPin}`);
-    } else if (newPin) {
-      alert('PIN harus tepat 6 digit angka.');
-    }
-  };
 
   // Modal Edit Dusun
   const [showEditDusunModal, setShowEditDusunModal] = useState(false);
@@ -291,14 +347,18 @@ export default function AdminPanelPage() {
       alert('Nama Dusun tidak boleh kosong.');
       return;
     }
-    await updateDusun(editingDusunData.oldName, editingDusunData.newName);
-    alert(`Nama Dusun berhasil diubah dari "${editingDusunData.oldName}" menjadi "${editingDusunData.newName.trim()}".`);
-    setShowEditDusunModal(false);
+    try {
+      await updateDusun(editingDusunData.oldName, editingDusunData.newName);
+      alert(`Nama Dusun berhasil diubah dari "${editingDusunData.oldName}" menjadi "${editingDusunData.newName.trim()}".`);
+      setShowEditDusunModal(false);
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   const handleDeleteDusun = async (dusunName) => {
     if (confirm(`Yakin ingin menghapus seluruh Dusun "${dusunName}" beserta seluruh RW dan RT di dalamnya?`)) {
-      await deleteDusun(dusunName);
+      try { await deleteDusun(dusunName); } catch (error) { alert(error.message); }
     }
   };
 
@@ -306,7 +366,7 @@ export default function AdminPanelPage() {
   const openAddWilayahModal = (mode, defaultDusun = '', defaultRw = '') => {
     setWilayahMode(mode);
     setNewWilayahForm({
-      dusun: defaultDusun || dusunList[0] || 'Sukamaju',
+      dusun: defaultDusun || dusunList[0] || '',
       rw: defaultRw || '01',
       rt: '01',
     });
@@ -323,7 +383,12 @@ export default function AdminPanelPage() {
     const formattedRw = String(newWilayahForm.rw).padStart(2, '0');
     const formattedRt = String(newWilayahForm.rt).padStart(2, '0');
 
-    await addWilayah(newWilayahForm.dusun, formattedRw, formattedRt);
+    try {
+      await addWilayah(newWilayahForm.dusun, formattedRw, formattedRt);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
     alert(`Wilayah Dusun ${newWilayahForm.dusun} - RW ${formattedRw} / RT ${formattedRt} berhasil disimpan!`);
 
     // Jika modal aparat sedang aktif, otomatis arahkan pilihan wilayah ke wilayah yang baru dibuat
@@ -341,7 +406,7 @@ export default function AdminPanelPage() {
 
   const handleDeleteWilayahItem = async (dusun, rw, rt) => {
     if (confirm(`Hapus RT ${rt} / RW ${rw} di Dusun ${dusun}?`)) {
-      await deleteWilayah(dusun, rw, rt);
+      try { await deleteWilayah(dusun, rw, rt); } catch (error) { alert(error.message); }
     }
   };
 
@@ -362,22 +427,12 @@ export default function AdminPanelPage() {
   });
 
   return (
-    <div className="pb-28 pt-4 px-4 max-w-md mx-auto">
+    <div className="app-page pb-28 pt-4 px-4 max-w-md mx-auto">
       {/* Header */}
-      <div className="mb-4">
-        <div className="flex items-center gap-1.5">
-          <div className="p-1.5 rounded-lg bg-teal-100 text-teal-800">
-            <Settings size={16} />
-          </div>
-          <h2 className="text-lg font-black text-slate-800 tracking-tight">Kelola Desa & Hak Akses</h2>
-        </div>
-        <p className="text-[11px] text-slate-500 mt-0.5">
-          Pengaturan identitas desa, struktur wilayah, & manajemen login PIN aparat
-        </p>
-      </div>
+      <BrandPageHeader title="Kelola Desa & Hak Akses" subtitle="Pengaturan desa, wilayah tugas, dan akun aparat" className="admin-topbar" />
 
       {/* Tab Navigasi 3 Pilihan */}
-      <div className="flex bg-slate-200/80 p-1 rounded-2xl mb-4 text-[11px] font-bold text-slate-600">
+      <div className="flex bg-slate-200/80 p-1 rounded-2xl mb-3 text-[10px] sm:text-[11px] font-bold text-slate-600">
         <button
           onClick={() => setActiveTab('aparat')}
           className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
@@ -411,89 +466,72 @@ export default function AdminPanelPage() {
           <Building2 size={13} />
           <span>Profil Desa</span>
         </button>
+        <button
+          onClick={() => setActiveTab('aktivitas')}
+          className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${activeTab === 'aktivitas' ? 'bg-white text-teal-800 shadow-sm' : 'hover:text-slate-800'}`}
+        >
+          <Activity size={13} />
+          <span>Aktivitas</span>
+        </button>
       </div>
 
-      {/* TAB 1: MANAJEMEN APARAT & LOGIN PIN */}
+      {/* TAB 1: MANAJEMEN PROFIL APARAT */}
       {activeTab === 'aparat' && (
-        <div className="space-y-3">
-          <div className="flex justify-between items-center mb-1">
-            <p className="text-xs text-slate-500">
-              Hak login aparatur menggunakan <strong>6-Digit PIN</strong>
+        <div className="space-y-2">
+          <div className="flex justify-between items-center gap-2 mb-1">
+            <p className="text-[11px] text-slate-500 leading-snug">
+              Akun dan wilayah akses aparat
             </p>
             <button
               onClick={openAddAparat}
-              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md shadow-teal-900/10 transition-all"
+              className="px-3 py-2 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-sm transition-all shrink-0"
             >
               <Plus size={14} />
               <span>Tambah Aparat</span>
             </button>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-1.5">
             {aparatList.map((a) => {
-              const isRevealed = Boolean(revealedPins[a.id]);
               return (
                 <div
                   key={a.id}
-                  className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all"
+                  className="bg-white px-3 py-2.5 rounded-xl border border-slate-200/90 shadow-sm"
                 >
                   <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{a.nama_lengkap}</h4>
-                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
+                        <h4 className="font-bold text-slate-900 text-xs truncate">{a.nama_lengkap}</h4>
+                        <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
                           {a.role}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{a.jabatan || 'Aparat Wilayah'}</p>
-                      <div className="mt-1 flex items-center gap-1 text-[10.5px] text-slate-600">
-                        <MapPin size={11} className="text-teal-600 flex-shrink-0" />
-                        <span>
+                      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-500 min-w-0">
+                        <MapPin size={10} className="text-teal-600 flex-shrink-0" />
+                        <span className="truncate">
                           {a.role === 'admin'
                             ? 'Akses Seluruh Desa'
                             : a.role === 'dusun'
                             ? `Dusun ${a.wilayah_dusun}`
                             : a.role === 'rw'
                             ? `RW ${a.wilayah_rw} (${a.wilayah_dusun})`
-                            : `RT ${a.wilayah_rt} / RW ${a.wilayah_rw} (${a.wilayah_dusun})`}
+                            : `RT ${a.wilayah_rt} / RW ${a.wilayah_rw} · ${a.wilayah_dusun}`}
                         </span>
                       </div>
                     </div>
 
-                    {/* PIN Indicator */}
-                    <div className="text-right flex-shrink-0">
-                      <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl">
-                        <Lock size={11} className="text-slate-400" />
-                        <span className="font-mono text-xs font-bold text-slate-800">
-                          {isRevealed ? a.pin : '••••••'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleRevealPin(a.id)}
-                          className="text-slate-400 hover:text-slate-600 ml-0.5"
-                          title="Lihat PIN"
-                        >
-                          {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                        </button>
-                      </div>
-                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-1 rounded-lg shrink-0 ${a.user_id ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                      {a.user_id ? 'Aktif' : 'Belum aktif'}
+                    </span>
                   </div>
 
                   {/* Action buttons */}
-                  <div className="mt-3 pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      User: <strong>{a.username}</strong>
+                  <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex justify-between items-center text-xs">
+                    <span className="text-[10px] text-slate-400 font-mono truncate">
+                      <strong>{a.username || 'Aparat'}</strong>
                     </span>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleQuickResetPin(a.id, a.nama_lengkap)}
-                        className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10.5px] font-semibold flex items-center gap-1 transition-all"
-                      >
-                        <KeyRound size={11} />
-                        <span>Ganti PIN</span>
-                      </button>
-
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => openEditAparat(a)}
                         className="p-1.5 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-all"
@@ -522,116 +560,85 @@ export default function AdminPanelPage() {
 
       {/* TAB 2: KELOLA WILAYAH (TAMBAH / EDIT DUSUN, RW, RT) */}
       {activeTab === 'wilayah' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
+        <div className="space-y-2.5">
+          <div className="flex justify-between items-center gap-2">
             <div>
-              <h3 className="text-xs font-bold text-slate-800">Struktur Wilayah Desa</h3>
-              <p className="text-[10px] text-slate-400">Master data Dusun, RW, dan RT untuk pilihan dropdown</p>
+              <h3 className="text-xs font-bold text-slate-800">Struktur Wilayah</h3>
+              <p className="text-[10px] text-slate-400">{Object.keys(groupedWilayah).length} dusun · pilih untuk melihat RW/RT</p>
             </div>
             <button
               onClick={() => openAddWilayahModal('dusun')}
-              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md shadow-teal-900/10 transition-all"
+              className="px-3 py-2 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-sm transition-all shrink-0"
             >
               <Plus size={14} />
               <span>Tambah Dusun</span>
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-1.5">
             {Object.keys(groupedWilayah).map((dusunName) => {
               const rwsInDusun = groupedWilayah[dusunName];
               return (
-                <div
-                  key={dusunName}
-                  className="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-sm"
-                >
-                  <div className="flex justify-between items-center pb-2.5 border-b border-slate-100 mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-xl bg-teal-50 text-teal-800">
-                        <MapPin size={16} />
+                <details key={dusunName} className="group bg-white rounded-xl border border-slate-200/90 shadow-sm">
+                  <summary className="list-none cursor-pointer px-3 py-2.5 flex items-center gap-2 [&::-webkit-details-marker]:hidden">
+                    <div className="p-1.5 rounded-lg bg-teal-50 text-teal-800 shrink-0"><MapPin size={14} /></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h4 className="font-bold text-slate-900 text-xs truncate">Dusun {dusunName}</h4>
+                        <span className="text-[9px] text-slate-400 shrink-0">{Object.keys(rwsInDusun).length} RW</span>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="font-extrabold text-slate-900 text-sm">Dusun {dusunName}</h4>
-                          <button
-                            type="button"
-                            onClick={() => openEditDusunModal(dusunName)}
-                            className="p-1 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-all"
-                            title="Ubah Nama Dusun"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteDusun(dusunName)}
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                            title="Hapus Dusun"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                        <span className="text-[10px] text-slate-400">
-                          {Object.keys(rwsInDusun).length} Rukun Warga (RW)
-                        </span>
-                      </div>
+                      <span className="text-[10px] text-slate-400">Ketuk untuk mengelola RT</span>
                     </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAddWilayahModal('rw', dusunName); }}
+                        className="px-2 py-1 rounded-lg bg-teal-50 text-teal-800 text-[10px] font-bold"
+                      ><Plus size={11} className="inline" /> RW</button>
+                      <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openEditDusunModal(dusunName); }} className="p-1 text-slate-400 hover:text-teal-700" title="Ubah nama dusun"><Edit2 size={13} /></button>
+                      <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); handleDeleteDusun(dusunName); }} className="p-1 text-slate-400 hover:text-rose-600" title="Hapus dusun"><Trash2 size={13} /></button>
+                    </div>
+                  </summary>
 
-                    <button
-                      onClick={() => openAddWilayahModal('rw', dusunName)}
-                      className="px-2.5 py-1 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-[10.5px] font-bold flex items-center gap-1 transition-all"
-                    >
-                      <Plus size={12} />
-                      <span>Tambah RW</span>
-                    </button>
-                  </div>
-
-                  {/* List RW & RT di bawah Dusun */}
-                  <div className="space-y-3 pl-1">
+                  <div className="px-3 pb-2.5 space-y-1.5">
                     {Object.keys(rwsInDusun).map((rwNumber) => {
                       const rtsInRw = rwsInDusun[rwNumber].sort();
                       return (
-                        <div key={rwNumber} className="bg-slate-50/80 p-3 rounded-2xl border border-slate-200/70">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-bold text-slate-800 font-mono">
-                              RW {rwNumber}
-                            </span>
-                            <button
-                              onClick={() => openAddWilayahModal('rt', dusunName, rwNumber)}
-                              className="text-[10px] text-teal-700 hover:text-teal-900 font-bold flex items-center gap-0.5"
-                            >
-                              <Plus size={11} />
-                              <span>Tambah RT</span>
-                            </button>
-                          </div>
-
-                          {/* Chips List RT */}
-                          <div className="flex flex-wrap gap-1.5">
+                        <div key={rwNumber} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-100">
+                          <span className="text-[11px] font-bold text-slate-700 font-mono shrink-0">RW {rwNumber}</span>
+                          <div className="flex-1 flex flex-wrap gap-1">
                             {rtsInRw.map((rtNumber) => (
-                              <div
-                                key={rtNumber}
-                                className="group inline-flex items-center gap-1 bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-xs font-mono font-bold text-slate-700 shadow-sm"
-                              >
-                                <span>RT {rtNumber}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteWilayahItem(dusunName, rwNumber, rtNumber)}
-                                  className="text-slate-300 hover:text-rose-600 transition-colors ml-0.5"
-                                  title="Hapus RT ini"
-                                >
-                                  ×
-                                </button>
-                              </div>
+                              <span key={rtNumber} className="group/chip inline-flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg text-[10px] font-mono text-slate-700">
+                                RT {rtNumber}
+                                <button type="button" onClick={() => handleDeleteWilayahItem(dusunName, rwNumber, rtNumber)} className="text-slate-300 hover:text-rose-600" title={`Hapus RT ${rtNumber}`}>×</button>
+                              </span>
                             ))}
                           </div>
+                          <button type="button" onClick={() => openAddWilayahModal('rt', dusunName, rwNumber)} className="text-[10px] text-teal-700 font-bold shrink-0"><Plus size={11} className="inline" /> RT</button>
                         </div>
                       );
                     })}
                   </div>
-                </div>
+                </details>
               );
             })}
           </div>
         </div>
+      )}
+
+      {activeTab === 'aktivitas' && (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div><h3 className="text-sm font-bold text-slate-800">Riwayat aktivitas admin</h3><p className="text-[10px] text-slate-500">Maksimal 100 aktivitas terbaru; perubahan nilai sensitif tidak dicatat.</p></div>
+            <button type="button" onClick={() => setAuditRefreshKey((value) => value + 1)} aria-label="Muat ulang aktivitas" className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600"><RefreshCw size={14} /></button>
+          </div>
+          {auditError && <p role="alert" className="p-3 rounded-xl bg-rose-50 text-rose-700 text-xs">Gagal memuat audit log: {auditError}</p>}
+          {auditLoading && auditLogs.length === 0 ? <p className="p-5 text-center text-xs text-slate-500">Memuat riwayat…</p> : auditLogs.length === 0 ? <div className="p-5 text-center rounded-xl border border-slate-200 bg-white text-xs text-slate-500">Belum ada aktivitas yang tercatat.</div> : auditLogs.map((entry) => (
+            <article key={entry.id} className="px-3 py-2.5 rounded-xl bg-white border border-slate-200">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-bold text-slate-800">{auditActionLabel(entry.action)}</p><p className="mt-0.5 text-[10px] text-slate-500">{entry.actor_name} · {entry.actor_role || 'admin'} · {entry.entity}{entry.record_id ? ` · ${entry.record_id}` : ''}</p>{entry.changed_fields?.length > 0 && <p className="mt-1 text-[10px] text-slate-500">Kolom: {entry.changed_fields.join(', ')}</p>}</div><time className="shrink-0 text-[9px] text-slate-400 flex items-center gap-1"><Clock3 size={10} />{new Date(entry.created_at).toLocaleString('id-ID')}</time></div>
+            </article>
+          ))}
+        </section>
       )}
 
       {/* TAB 3: PENGATURAN IDENTITAS DESA & KEPALA DESA */}
@@ -676,7 +683,7 @@ export default function AdminPanelPage() {
                   type="text"
                   value={desaForm.nama_kecamatan}
                   onChange={(e) => setDesaForm({ ...desaForm, nama_kecamatan: e.target.value })}
-                  placeholder="Sukaraja"
+                  placeholder="Nama Kecamatan"
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none"
                 />
               </div>
@@ -686,7 +693,7 @@ export default function AdminPanelPage() {
                   type="text"
                   value={desaForm.nama_kabupaten}
                   onChange={(e) => setDesaForm({ ...desaForm, nama_kabupaten: e.target.value })}
-                  placeholder="Bogor"
+                  placeholder="Bekasi"
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none"
                 />
               </div>
@@ -731,10 +738,10 @@ export default function AdminPanelPage() {
             </span>
             <div className="bg-white p-3 rounded-2xl border border-slate-200/60 shadow-sm text-center">
               <p className="text-[11px] font-bold uppercase text-slate-800">
-                PEMERINTAH KABUPATEN {desaForm.nama_kabupaten || 'BOGOR'}
+                PEMERINTAH KABUPATEN {desaForm.nama_kabupaten?.replace(/^kabupaten\s+/i, '') || 'BEKASI'}
               </p>
               <p className="text-[10px] font-bold uppercase text-slate-700">
-                KECAMATAN {desaForm.nama_kecamatan || 'SUKARAJA'} • DESA {desaForm.nama_desa || 'SUKAMAJU'}
+                KECAMATAN {desaForm.nama_kecamatan?.replace(/^kecamatan\s+/i, '') || '—'} • DESA {desaForm.nama_desa?.replace(/^desa\s+/i, '') || '—'}
               </p>
               <p className="text-[9px] text-slate-400 mt-0.5">{desaForm.alamat_kantor || 'Alamat Kantor Desa'}</p>
               <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] text-slate-600">
@@ -756,9 +763,9 @@ export default function AdminPanelPage() {
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 text-sm sm:text-base">
-                    {editingAparat ? 'Ubah Akun Aparat' : 'Tambah Aparat & Hak Login PIN'}
+                    {editingAparat ? 'Ubah Akun Aparat' : 'Tambah Akun Aparat'}
                   </h3>
-                  <p className="text-[11px] text-slate-500">Pilih wilayah dari database & tetapkan PIN login</p>
+                  <p className="text-[11px] text-slate-500">Akun login otomatis dibuat dan PIN diverifikasi server</p>
                 </div>
               </div>
               <button
@@ -782,7 +789,13 @@ export default function AdminPanelPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">{editingAparat?.user_id ? 'Reset PIN (opsional)' : 'PIN Awal *'}</label>
+                  <input type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} value={aparatForm.pin} onChange={(e) => setAparatForm({ ...aparatForm, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} required={!editingAparat?.user_id} placeholder="6 angka" className="w-full p-2.5 rounded-xl border border-slate-200 font-mono tracking-[0.4em] text-sm focus:ring-2 focus:ring-teal-600 outline-none" />
+                  <p className="mt-1 text-[10px] text-slate-500">{editingAparat?.user_id ? 'Isi hanya jika aparat lupa atau perlu mengganti PIN. PIN lama tidak dapat dilihat dan akan langsung diganti.' : 'PIN harus unik untuk tiap aparat. Berikan secara pribadi.'}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Peran / Role *</label>
                   <select
@@ -797,20 +810,6 @@ export default function AdminPanelPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">PIN 6-Digit *</label>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={aparatForm.pin}
-                    onChange={(e) =>
-                      setAparatForm({ ...aparatForm, pin: e.target.value.replace(/\D/g, '') })
-                    }
-                    required
-                    placeholder="123456"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-center tracking-widest text-xs sm:text-sm font-bold text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
-                  />
-                </div>
               </div>
 
               {/* DROPDOWN WILAYAH DUSUN, RW, RT (TARIK DARI DATABASE) */}
@@ -840,6 +839,7 @@ export default function AdminPanelPage() {
                         onChange={(e) => handleDusunChange(e.target.value)}
                         className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-teal-600 outline-none"
                       >
+                        <option value="">Pilih Dusun</option>
                         {dusunList.map((d) => (
                           <option key={d} value={d}>
                             {d}
@@ -858,6 +858,7 @@ export default function AdminPanelPage() {
                           onChange={(e) => handleRwChange(e.target.value)}
                           className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-bold text-center text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
                         >
+                          <option value="">Pilih RW</option>
                           {rwList.map((r) => (
                             <option key={r} value={r}>
                               RW {r}
@@ -875,6 +876,7 @@ export default function AdminPanelPage() {
                           onChange={(e) => handleRtChange(e.target.value)}
                           className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-bold text-center text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
                         >
+                          <option value="">Pilih RT</option>
                           {rtList.map((t) => (
                             <option key={t} value={t}>
                               RT {t}
@@ -904,7 +906,7 @@ export default function AdminPanelPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Username / Kode Login</label>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Username internal (opsional)</label>
                 <input
                   type="text"
                   value={aparatForm.username}

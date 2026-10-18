@@ -7,7 +7,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      // Serve the generated manifest and service worker in local development
+      // so the manifest link in index.html never falls through to the SPA HTML.
+      devOptions: {
+        enabled: true,
+      },
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'bekasikab.png'],
       manifest: {
         name: 'SIM Aparat Desa PWA',
         short_name: 'ApkDesa',
@@ -30,24 +35,9 @@ export default defineConfig({
           }
         ]
       },
-      workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/sylnxlenycyulkwrlxqm\.supabase\.co\/rest\/v1\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-api-cache',
-              expiration: {
-                maxEntries: 150,
-                maxAgeSeconds: 60 * 60 * 24 * 3 // 3 hari offline cache
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          }
-        ]
-      }
+      // Cache only the application shell. Authenticated Supabase responses
+      // contain PII and must never enter a shared service-worker cache.
+      workbox: {}
     })
   ]
 });

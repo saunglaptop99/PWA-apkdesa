@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import BrandPageHeader from '../components/common/BrandPageHeader';
 import { useAuth } from '../context/AuthContext';
 import { useDesa } from '../context/DesaContext';
 import {
@@ -8,19 +9,14 @@ import {
   Shield,
   Layers,
   Smartphone,
-  CheckCircle,
   Database,
-  UserCheck,
-  Building2,
-  KeyRound,
   ChevronRight,
   Settings,
 } from 'lucide-react';
 
 export default function ProfilPage({ setActiveTab }) {
-  const { profile, logout, isOnline, aparatList, loginDemo } = useAuth();
+  const { profile, logout, isOnline } = useAuth();
   const { pengaturanDesa } = useDesa();
-  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
 
   const getRoleLabel = (role) => {
     switch (role) {
@@ -38,14 +34,9 @@ export default function ProfilPage({ setActiveTab }) {
   };
 
   return (
-    <div className="pb-28 pt-4 px-4 max-w-md mx-auto">
+    <div className="app-page pb-28 pt-4 px-4 max-w-md mx-auto">
       {/* Header */}
-      <div className="mb-4">
-        <h2 className="text-lg font-black text-slate-800 tracking-tight">Akun Aparat</h2>
-        <p className="text-[11px] text-slate-500 mt-0.5">
-          Pemerintah Desa {pengaturanDesa?.nama_desa} • Status & Akses Kewilayahan
-        </p>
-      </div>
+      <BrandPageHeader title="Akun Aparat" subtitle={`Desa ${pengaturanDesa?.nama_desa || ''} · Status dan akses wilayah`} className="profil-topbar" />
 
       {/* Profile Card */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm text-center mb-4 relative overflow-hidden">
@@ -71,10 +62,6 @@ export default function ProfilPage({ setActiveTab }) {
             <span>Role: {profile?.role}</span>
           </span>
 
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-700 rounded-full text-[11px] font-mono font-bold">
-            <KeyRound size={11} className="text-slate-500" />
-            <span>PIN: {profile?.pin || '123456'}</span>
-          </span>
         </div>
 
         <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-600 space-y-1.5 bg-slate-50/70 p-3 rounded-2xl text-left">
@@ -115,7 +102,7 @@ export default function ProfilPage({ setActiveTab }) {
               </div>
               <div>
                 <h4 className="font-extrabold text-sm">Kelola Desa & Hak Akses</h4>
-                <p className="text-[11px] text-teal-200">Aparat, PIN, Master Dusun/RW/RT, & Profil Desa</p>
+                <p className="text-[11px] text-teal-200">Akun aparat, Master Dusun/RW/RT, & Profil Desa</p>
               </div>
             </div>
           </div>
@@ -129,67 +116,6 @@ export default function ProfilPage({ setActiveTab }) {
           </button>
         </div>
       )}
-
-      {/* Role Switcher for Fast Multi-Role Testing */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm mb-4">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-purple-50 text-purple-700">
-              <UserCheck size={16} />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-800">Uji Coba Ganti Role & Wilayah</h4>
-              <p className="text-[10px] text-slate-400">Pilih akun lain untuk menguji isolasi data RT/RW</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
-            className="text-[11px] font-bold text-purple-700 hover:text-purple-900"
-          >
-            {showRoleSwitcher ? 'Tutup' : 'Ganti Akun'}
-          </button>
-        </div>
-
-        {showRoleSwitcher && (
-          <div className="mt-3 pt-3 border-t border-slate-100 space-y-2 animate-fade-in">
-            {aparatList.map((dp) => (
-              <button
-                key={dp.id}
-                onClick={() => {
-                  loginDemo(dp);
-                  setShowRoleSwitcher(false);
-                }}
-                className={`w-full text-left p-2.5 rounded-xl border text-xs flex justify-between items-center transition-all ${
-                  profile?.id === dp.id
-                    ? 'border-purple-500 bg-purple-50/70 text-purple-900 font-bold'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div>
-                  <div className="font-bold flex items-center gap-1.5">
-                    <span>{dp.nama_lengkap}</span>
-                    <span className="text-[9px] uppercase px-1.5 py-0.2 bg-slate-100 rounded text-slate-600 font-mono">
-                      {dp.role}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">
-                    {dp.role === 'admin'
-                      ? 'Akses Semua Data Desa & Mutasi'
-                      : dp.role === 'dusun'
-                      ? `Hanya Dusun ${dp.wilayah_dusun}`
-                      : dp.role === 'rw'
-                      ? `Hanya RW ${dp.wilayah_rw}`
-                      : `Hanya RT ${dp.wilayah_rt} / RW ${dp.wilayah_rw}`}
-                  </span>
-                </div>
-                {profile?.id === dp.id && (
-                  <CheckCircle size={15} className="text-purple-600 flex-shrink-0" />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* Indikator PWA Offline & Storage */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm mb-4">
@@ -206,8 +132,8 @@ export default function ProfilPage({ setActiveTab }) {
               <p className="text-xs font-bold text-slate-800">Status Jaringan & PWA Cache</p>
               <p className="text-[10.5px] text-slate-500">
                 {isOnline
-                  ? 'Terhubung • Realtime sync aktif'
-                  : 'Mode Offline • Data dimuat dari Workbox Cache'}
+                  ? 'Internet tersedia • status realtime terlihat di halaman warga'
+                  : 'Mode Offline • Menampilkan data lokal akun ini jika tersedia'}
               </p>
             </div>
           </div>
@@ -223,10 +149,10 @@ export default function ProfilPage({ setActiveTab }) {
         <div className="bg-slate-50 p-2.5 rounded-xl text-[11px] text-slate-600 space-y-1">
           <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
             <Smartphone size={13} className="text-teal-600" />
-            <span>PWA Auto-Update & Service Worker Aktif</span>
+            <span>PWA Auto-Update aktif; API pribadi tidak dicache Service Worker</span>
           </div>
           <p className="text-[10px] text-slate-400">
-            Aplikasi tetap dapat digunakan mencetak surat & melihat data warga saat berkunjung ke lokasi tanpa sinyal internet.
+            Data offline hanya tersedia jika pernah dimuat di akun ini. Perubahan baru memerlukan koneksi dan tidak otomatis tersinkronisasi saat offline.
           </p>
         </div>
       </div>
@@ -248,6 +174,7 @@ export default function ProfilPage({ setActiveTab }) {
           <span className="font-mono text-slate-800">v1.1.0 Production PWA</span>
         </div>
       </div>
+      <p className="px-1 text-[10px] text-slate-400">Dikembangkan oleh K2C Komputindo Team · 081298406844</p>
 
       {/* Tombol Logout */}
       <button

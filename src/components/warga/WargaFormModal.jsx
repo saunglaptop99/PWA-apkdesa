@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useDesa } from '../../context/DesaContext';
+import { useAuth } from '../../context/AuthContext';
+import { readUserCache, writeUserCache } from '../../lib/userCache';
 import {
   X,
   UserPlus,
@@ -21,6 +23,7 @@ import {
 
 export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
   const isEdit = Boolean(wargaToEdit);
+  const { user } = useAuth();
   const { getDusunOptions, getRwOptions, getRtOptions } = useDesa();
 
   // Active category step/tab: 1 | 2 | 3 | 4 | 5
@@ -41,7 +44,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
 
     // Kategori 2: Hubungan & Status Keluarga
     shdk: wargaToEdit?.shdk || 'Kepala Keluarga',
-    status_perkawinan: wargaToEdit?.status_perkawinan || 'Kawin',
+    status_perkawinan: wargaToEdit?.status_perkawinan || 'Belum Kawin',
     no_akta_nikah_cerai: wargaToEdit?.no_akta_nikah_cerai || '',
     nama_ayah: wargaToEdit?.nama_ayah || '',
     nama_ibu: wargaToEdit?.nama_ibu || '',
@@ -58,9 +61,9 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
     bpjs_pbi: wargaToEdit?.bpjs_pbi || false,
 
     // Kategori 4: Lokasi & Alamat Domisili
-    dusun: wargaToEdit?.dusun || getDusunOptions()[0] || 'Sukamaju',
-    rw: wargaToEdit?.rw ? String(wargaToEdit.rw).padStart(2, '0') : '01',
-    rt: wargaToEdit?.rt ? String(wargaToEdit.rt).padStart(2, '0') : '01',
+    dusun: wargaToEdit?.dusun || getDusunOptions()[0] || '',
+    rw: wargaToEdit?.rw ? String(wargaToEdit.rw).padStart(2, '0') : '',
+    rt: wargaToEdit?.rt ? String(wargaToEdit.rt).padStart(2, '0') : '',
     alamat_detail: wargaToEdit?.alamat_detail || '',
     status_tempat_tinggal: wargaToEdit?.status_tempat_tinggal || 'Milik Sendiri',
     telepon: wargaToEdit?.telepon || '',
@@ -76,6 +79,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [identityNotice, setIdentityNotice] = useState('');
   const [customWilayah, setCustomWilayah] = useState(false);
 
   const dusunOptions = getDusunOptions();
@@ -84,6 +88,10 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (name === 'nik' || name === 'no_kk') {
+      setErrorMsg('');
+      setIdentityNotice('');
+    }
     setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
@@ -125,12 +133,12 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!form.nik || form.nik.length < 16) {
+    if (!/^\d{16}$/.test(form.nik || '')) {
       setErrorMsg('NIK harus tepat 16 digit angka.');
       setActiveStep(1);
       return;
     }
-    if (!form.no_kk || form.no_kk.length < 16) {
+    if (!/^\d{16}$/.test(form.no_kk || '')) {
       setErrorMsg('Nomor KK harus tepat 16 digit angka.');
       setActiveStep(1);
       return;
@@ -139,6 +147,53 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
       setErrorMsg('Nama lengkap warga wajib diisi.');
       setActiveStep(1);
       return;
+    }
+    if (!form.dusun || !form.rw || !form.rt) {
+      setErrorMsg('Dusun, RW, dan RT harus diatur terlebih dahulu.');
+      setActiveStep(4);
+      return;
+    }
+
+    // NIK harus unik per orang. Cek database sebelum simpan; unique constraint
+    // di database tetap menjadi pengaman terakhir untuk input bersamaan.
+    const { data: nikMatch, error: nikCheckError } = await supabase
+      .from('warga')
+      .select('id')
+      .eq('nik', form.nik)
+      .limit(1);
+    if (nikCheckError) {
+      setErrorMsg('NIK belum dapat diperiksa ke database. Periksa koneksi lalu coba lagi.');
+      setActiveStep(1);
+      return;
+    }
+    if (nikMatch?.some((row) => row.id !== wargaToEdit?.id)) {
+      setErrorMsg('NIK ini sudah terdaftar pada data warga lain. Periksa kembali NIK yang dimasukkan.');
+      setActiveStep(1);
+      return;
+    }
+
+    // Nomor KK memang boleh dipakai beberapa anggota dalam satu keluarga.
+    // Tampilkan pemberitahuan agar admin tahu bahwa ini KK yang sudah ada.
+    const { data: kkMatch, error: kkCheckError } = await supabase
+      .from('warga')
+      .select('id')
+      .eq('no_kk', form.no_kk)
+      .limit(1);
+    if (kkCheckError) {
+      setErrorMsg('Nomor KK belum dapat diperiksa ke database. Periksa koneksi lalu coba lagi.');
+      setActiveStep(1);
+      return;
+    }
+    if (kkMatch?.some((row) => row.id !== wargaToEdit?.id)) {
+      setIdentityNotice('Nomor KK ini sudah digunakan warga lain. Ini diperbolehkan jika warga tersebut anggota keluarga pada KK yang sama.');
+    } else {
+      setIdentityNotice('');
+    }
+
+    if (isEdit) {
+      const sensitiveFields = ['nik', 'no_kk', 'dusun', 'rw', 'rt', 'status_kependudukan'];
+      const changedSensitiveFields = sensitiveFields.filter((field) => String(form[field] ?? '') !== String(wargaToEdit?.[field] ?? ''));
+      if (changedSensitiveFields.length && !window.confirm(`Perubahan menyentuh identitas atau wilayah utama (${changedSensitiveFields.join(', ')}). Lanjutkan hanya jika sesuai dokumen warga.`)) return;
     }
 
     setLoading(true);
@@ -152,73 +207,24 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
 
     try {
       if (isEdit) {
-        // Coba simpan payload lengkap ke Supabase
         const { error } = await supabase
           .from('warga')
           .update(payload)
           .eq('id', wargaToEdit.id);
 
-        if (error) {
-          // Jika Supabase schema cache belum diperbarui (misal kolom baru belum dijalankan di SQL)
-          // kirim kolom dasar terlebih dahulu agar Supabase tetap tersinkronisasi
-          console.warn('DB update note:', error.message);
-          const basePayload = {
-            nik: payload.nik,
-            no_kk: payload.no_kk,
-            nama: payload.nama,
-            tempat_lahir: payload.tempat_lahir,
-            tanggal_lahir: payload.tanggal_lahir,
-            jenis_kelamin: payload.jenis_kelamin,
-            agama: payload.agama,
-            pekerjaan: payload.pekerjaan,
-            shdk: payload.shdk,
-            dusun: payload.dusun,
-            rw: payload.rw,
-            rt: payload.rt,
-            alamat_detail: payload.alamat_detail,
-            status_kependudukan: payload.status_kependudukan,
-            status_ekonomi: payload.status_ekonomi,
-            updated_at: payload.updated_at,
-          };
-          await supabase.from('warga').update(basePayload).eq('id', wargaToEdit.id);
-        }
-
-        // Simpan selalu seluruh data 32 kolom ke local cache agar langsung tampil di UI
-        const localList = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
+        if (error) throw error;
+        const localList = readUserCache(user?.id, 'warga', []);
         const idx = localList.findIndex((w) => w.id === wargaToEdit.id || w.nik === form.nik);
         if (idx >= 0) {
           localList[idx] = { ...localList[idx], ...payload };
-          localStorage.setItem('cached_warga_desa', JSON.stringify(localList));
+          writeUserCache(user?.id, 'warga', localList);
         }
       } else {
-        // Mode Tambah Baru
-        const { error } = await supabase.from('warga').insert([payload]);
-        if (error) {
-          console.warn('DB insert note:', error.message);
-          const basePayload = {
-            nik: payload.nik,
-            no_kk: payload.no_kk,
-            nama: payload.nama,
-            tempat_lahir: payload.tempat_lahir,
-            tanggal_lahir: payload.tanggal_lahir,
-            jenis_kelamin: payload.jenis_kelamin,
-            agama: payload.agama,
-            pekerjaan: payload.pekerjaan,
-            shdk: payload.shdk,
-            dusun: payload.dusun,
-            rw: payload.rw,
-            rt: payload.rt,
-            alamat_detail: payload.alamat_detail,
-            status_kependudukan: payload.status_kependudukan,
-            status_ekonomi: payload.status_ekonomi,
-            updated_at: payload.updated_at,
-          };
-          await supabase.from('warga').insert([basePayload]);
-        }
-
-        const localList = JSON.parse(localStorage.getItem('cached_warga_desa') || '[]');
-        localList.unshift({ id: 'w-' + Date.now(), ...payload });
-        localStorage.setItem('cached_warga_desa', JSON.stringify(localList));
+        const { data, error } = await supabase.from('warga').insert([payload]).select().single();
+        if (error) throw error;
+        const localList = readUserCache(user?.id, 'warga', []);
+        localList.unshift(data);
+        writeUserCache(user?.id, 'warga', localList);
       }
 
       // Beritahu seluruh tab / role via broadcast
@@ -226,7 +232,12 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
       onSuccess();
       onClose();
     } catch (err) {
-      setErrorMsg(err.message || 'Terjadi kesalahan saat menyimpan data warga.');
+      if (err.code === '23505' || /duplicate key|already exists/i.test(err.message || '')) {
+        setErrorMsg('Data dengan NIK ini sudah terdaftar. Periksa kembali identitas warga.');
+        setActiveStep(1);
+      } else {
+        setErrorMsg(err.message || 'Terjadi kesalahan saat menyimpan data warga.');
+      }
     } finally {
       setLoading(false);
     }
@@ -260,6 +271,12 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
           <div className="my-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2 flex-shrink-0">
             <AlertCircle size={15} className="flex-shrink-0" />
             <span>{errorMsg}</span>
+          </div>
+        )}
+        {identityNotice && (
+          <div className="my-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2 flex-shrink-0" role="status">
+            <AlertCircle size={15} className="flex-shrink-0" />
+            <span>{identityNotice}</span>
           </div>
         )}
 
@@ -509,6 +526,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
                     name="status_perkawinan"
                     value={form.status_perkawinan}
                     onChange={handleChange}
+                    disabled={isEdit}
                     className="w-full p-2.5 rounded-xl border border-slate-200 text-xs bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-teal-600 outline-none"
                   >
                     <option value="Belum Kawin">Belum Kawin</option>
@@ -529,6 +547,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
                   name="no_akta_nikah_cerai"
                   value={form.no_akta_nikah_cerai}
                   onChange={handleChange}
+                    disabled={isEdit}
                   placeholder="Contoh: KUA.10.01/PW.01/123/2012"
                   className="w-full p-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none"
                 />
@@ -547,6 +566,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
                     placeholder="Nama ayah kandung"
                     className="w-full p-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-teal-600 outline-none"
                   />
+                  {isEdit && <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Untuk menjaga riwayat, perubahan status perkawinan dan nomor dokumen dicatat melalui menu Mutasi.</p>}
                 </div>
 
                 <div>
@@ -730,6 +750,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
                         onChange={handleDusunChange}
                         className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-teal-600 outline-none"
                       >
+                        <option value="">Pilih Dusun</option>
                         {dusunOptions.map((d) => (
                           <option key={d} value={d}>
                             {d}
@@ -746,6 +767,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
                         onChange={handleRwChange}
                         className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-bold text-center text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
                       >
+                        <option value="">Pilih RW</option>
                         {rwOptions.map((r) => (
                           <option key={r} value={r}>
                             RW {r}
@@ -762,6 +784,7 @@ export default function WargaFormModal({ wargaToEdit, onClose, onSuccess }) {
                         onChange={handleChange}
                         className="w-full p-2 rounded-xl border border-slate-200 text-xs bg-white font-bold text-center text-teal-800 focus:ring-2 focus:ring-teal-600 outline-none"
                       >
+                        <option value="">Pilih RT</option>
                         {rtOptions.map((t) => (
                           <option key={t} value={t}>
                             RT {t}

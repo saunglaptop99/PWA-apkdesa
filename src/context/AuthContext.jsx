@@ -1,353 +1,268 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { clearUserCache } from '../lib/userCache';
 
 const AuthContext = createContext();
-
-// Pre-seeded aparat accounts with 6-digit PIN (Default: 123456)
-export const DEFAULT_APARAT_LIST = [
-  {
-    id: 'aparat-admin',
-    username: 'admin',
-    pin: '123456',
-    nama_lengkap: 'Bpk. Suryanto, S.Sos',
-    jabatan: 'Sekretaris Desa / Admin',
-    role: 'admin',
-    wilayah_dusun: null,
-    wilayah_rw: null,
-    wilayah_rt: null,
-    telepon: '0812-3456-7800',
-  },
-  {
-    id: 'aparat-kadus-1',
-    username: 'kadus1',
-    pin: '123456',
-    nama_lengkap: 'Bpk. Ahmad Fauzi',
-    jabatan: 'Kepala Dusun Sukamaju',
-    role: 'dusun',
-    wilayah_dusun: 'Sukamaju',
-    wilayah_rw: null,
-    wilayah_rt: null,
-    telepon: '0812-3456-7801',
-  },
-  {
-    id: 'aparat-rw-01',
-    username: 'rw01',
-    pin: '123456',
-    nama_lengkap: 'Bpk. Dedi Supardi',
-    jabatan: 'Ketua RW 01',
-    role: 'rw',
-    wilayah_dusun: 'Sukamaju',
-    wilayah_rw: '01',
-    wilayah_rt: null,
-    telepon: '0812-3456-7802',
-  },
-  {
-    id: 'aparat-rt-01-01',
-    username: 'rt01_01',
-    pin: '123456',
-    nama_lengkap: 'Bpk. Mulyadi',
-    jabatan: 'Ketua RT 01 / RW 01',
-    role: 'rt',
-    wilayah_dusun: 'Sukamaju',
-    wilayah_rw: '01',
-    wilayah_rt: '01',
-    telepon: '0812-3456-7803',
-  },
-  {
-    id: 'aparat-rt-02-01',
-    username: 'rt02_01',
-    pin: '123456',
-    nama_lengkap: 'Bpk. Ridwan Kamiludin',
-    jabatan: 'Ketua RT 02 / RW 01',
-    role: 'rt',
-    wilayah_dusun: 'Sukamaju',
-    wilayah_rw: '01',
-    wilayah_rt: '02',
-    telepon: '0812-3456-7804',
-  },
-  {
-    id: 'aparat-rt-01-02',
-    username: 'rt01_02',
-    pin: '123456',
-    nama_lengkap: 'Bpk. Cecep Hidayat',
-    jabatan: 'Ketua RT 01 / RW 02',
-    role: 'rt',
-    wilayah_dusun: 'Mekarsari',
-    wilayah_rw: '02',
-    wilayah_rt: '01',
-    telepon: '0812-3456-7805',
-  },
-];
-
-export const DEMO_PROFILES = DEFAULT_APARAT_LIST;
+const PROFILE_FIELDS = 'id,user_id,username,nama_lengkap,role,jabatan,telepon,wilayah_dusun,wilayah_rw,wilayah_rt';
+const cacheKey = (name, userId) => `${name}:${userId}`;
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [aparatList, setAparatList] = useState(() => {
-    const cached = localStorage.getItem('cached_aparat_list');
-    return cached ? JSON.parse(cached) : DEFAULT_APARAT_LIST;
-  });
+  const [aparatList, setAparatList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isDemoMode, setIsDemoMode] = useState(false);
 
-  // Sync aparat list from Supabase
-  const fetchAparatList = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('role', { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        setAparatList(data);
-        localStorage.setItem('cached_aparat_list', JSON.stringify(data));
-      }
-    } catch (e) {
-      console.warn('Gagal fetch profiles dari Supabase, pakai cache:', e);
-    }
-  };
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // Initial load
-    fetchAparatList();
-
-    // Check saved session in localStorage
-    const savedSession = localStorage.getItem('sim_aparat_active_profile');
-    if (savedSession) {
+  const logout = useCallback(async () => {
+    const userId = user?.id;
+    try { await supabase.auth.signOut({ scope: 'local' }); } catch (error) { console.warn('Sesi lokal tidak dapat dicabut dari server:', error); }
+    setUser(null);
+    setProfile(null);
+    setAparatList([]);
+    if (userId) {
       try {
-        const parsed = JSON.parse(savedSession);
-        setUser({ id: parsed.id, username: parsed.username });
-        setProfile(parsed);
-        setIsDemoMode(true);
-        setLoading(false);
-      } catch (e) {
-        localStorage.removeItem('sim_aparat_active_profile');
-      }
-    } else {
-      // Check Supabase session if using email
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          setUser(session.user);
-          fetchProfile(session.user.id);
-        } else {
-          setLoading(false);
-        }
-      });
+        localStorage.removeItem(cacheKey('profile', userId));
+        localStorage.removeItem(`sim-last-active:${userId}`);
+        localStorage.removeItem(`sim-session-start:${userId}`);
+      } catch { /* Browser storage may be disabled. */ }
+      clearUserCache(userId);
+    }
+    for (const key of ['cached_warga_desa', 'cached_warga_local', 'cached_mutasi', 'cached_aparat_list', 'cached_profile', 'sim_aparat_active_profile']) {
+      try { localStorage.removeItem(key); } catch { /* Browser storage may be disabled. */ }
+    }
+  }, [user?.id]);
+
+  const fetchProfile = useCallback(async (userId) => {
+    if (!userId) {
+      setProfile(null);
+      setAparatList([]);
+      setLoading(false);
+      return null;
     }
 
-    // Realtime listener for profiles changes
-    const profilesChannel = supabase
-      .channel('realtime-profiles-sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles' },
-        () => {
-          fetchAparatList();
-        }
-      )
-      .subscribe();
-
-    const handleAparatLocalSync = () => {
-      const cached = localStorage.getItem('cached_aparat_list');
-      if (cached) setAparatList(JSON.parse(cached));
-    };
-    window.addEventListener('aparat-list-updated', handleAparatLocalSync);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('aparat-list-updated', handleAparatLocalSync);
-      supabase.removeChannel(profilesChannel);
-    };
-  }, []);
-
-  const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
-        .eq('id', userId)
+        .select(PROFILE_FIELDS)
+        .eq('user_id', userId)
         .single();
-
-      if (!error && data) {
-        setProfile(data);
-        localStorage.setItem('cached_profile', JSON.stringify(data));
-      } else {
-        const cached = localStorage.getItem('cached_profile');
-        if (cached) setProfile(JSON.parse(cached));
+      if (error) throw error;
+      setProfile(data);
+      try {
+        localStorage.setItem(cacheKey('profile', userId), JSON.stringify(data));
+      } catch (cacheError) {
+        console.warn('Profil berhasil dimuat, tetapi cache lokal tidak dapat diperbarui:', cacheError);
       }
-    } catch {
-      const cached = localStorage.getItem('cached_profile');
-      if (cached) setProfile(JSON.parse(cached));
+
+      if (data.role === 'admin') {
+        const { data: people, error: listError } = await supabase
+          .from('profiles')
+          .select(PROFILE_FIELDS)
+          .order('nama_lengkap');
+        if (listError) throw listError;
+        setAparatList(people || []);
+      } else {
+        setAparatList([data]);
+      }
+      return data;
+    } catch (error) {
+      // Offline access is limited to the signed-in user's own last known role.
+      let ownProfile = null;
+      try {
+        const cached = localStorage.getItem(cacheKey('profile', userId));
+        ownProfile = cached ? JSON.parse(cached) : null;
+      } catch {
+        try { localStorage.removeItem(cacheKey('profile', userId)); } catch { /* Local storage may be disabled by the browser. */ }
+      }
+      const safeProfile = navigator.onLine ? null : ownProfile;
+      setProfile(safeProfile);
+      setAparatList(safeProfile ? [safeProfile] : []);
+      if (navigator.onLine) console.error('Gagal memuat profil aparat:', error.message);
+      return safeProfile;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Login Cepat Menggunakan 6 Digit PIN
-  const loginWithPin = async (aparatIdOrUsername, pin) => {
-    setLoading(true);
-    try {
-      // 1. Cek di daftar aparat lokal/cache terlebih dahulu
-      const target = aparatList.find(
-        (a) =>
-          (a.id === aparatIdOrUsername || a.username === aparatIdOrUsername) &&
-          String(a.pin) === String(pin)
-      );
+  const fetchAparatList = useCallback(async () => {
+    if (!user || profile?.role !== 'admin') return [];
+    const { data, error } = await supabase.from('profiles').select(PROFILE_FIELDS).order('nama_lengkap');
+    if (error) throw error;
+    setAparatList(data || []);
+    return data || [];
+  }, [user, profile?.role]);
 
-      if (target) {
-        setProfile(target);
-        setUser({ id: target.id, username: target.username });
-        setIsDemoMode(true);
-        localStorage.setItem('sim_aparat_active_profile', JSON.stringify(target));
-        setLoading(false);
-        return { success: true, profile: target };
+  useEffect(() => {
+    const online = () => setIsOnline(true);
+    const offline = () => setIsOnline(false);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+
+    let active = true;
+    const applySession = async (session) => {
+      if (!active) return;
+      setUser(session?.user || null);
+      if (session?.user) {
+        const currentProfile = await fetchProfile(session.user.id);
+        if (!currentProfile) {
+          setUser(null);
+          await supabase.auth.signOut();
+        }
       }
-
-      // 2. Cek ke Supabase jika ada di cloud
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .or(`id.eq.${aparatIdOrUsername},username.eq.${aparatIdOrUsername}`)
-        .eq('pin', pin)
-        .single();
-
-      if (!error && data) {
-        setProfile(data);
-        setUser({ id: data.id, username: data.username });
-        setIsDemoMode(true);
-        localStorage.setItem('sim_aparat_active_profile', JSON.stringify(data));
+      else {
+        setProfile(null);
+        setAparatList([]);
         setLoading(false);
-        return { success: true, profile: data };
       }
-
-      setLoading(false);
-      return { success: false, message: 'PIN salah atau akun aparat tidak ditemukan!' };
-    } catch (err) {
-      setLoading(false);
-      return { success: false, message: err.message || 'Gagal memverifikasi PIN.' };
-    }
-  };
-
-  // CRUD Aparat Desa (Khusus Admin)
-  const addAparat = async (newAparat) => {
-    const formatted = {
-      id: 'aparat-' + Date.now(),
-      username: newAparat.username.toLowerCase().replace(/\s+/g, '_'),
-      pin: newAparat.pin || '123456',
-      nama_lengkap: newAparat.nama_lengkap,
-      jabatan: newAparat.jabatan || `Aparat ${newAparat.role.toUpperCase()}`,
-      role: newAparat.role,
-      wilayah_dusun: newAparat.wilayah_dusun || null,
-      wilayah_rw: newAparat.wilayah_rw || null,
-      wilayah_rt: newAparat.wilayah_rt || null,
-      telepon: newAparat.telepon || '',
-      created_at: new Date().toISOString(),
     };
 
-    const updated = [...aparatList, formatted];
-    setAparatList(updated);
-    localStorage.setItem('cached_aparat_list', JSON.stringify(updated));
-    window.dispatchEvent(new Event('aparat-list-updated'));
-
-    try {
-      await supabase.from('profiles').insert([formatted]);
-    } catch (e) {
-      console.warn('Gagal simpan aparat ke server Supabase:', e);
-    }
-    return formatted;
-  };
-
-  const updateAparat = async (id, updatedFields) => {
-    const updated = aparatList.map((a) => {
-      if (a.id === id) {
-        return { ...a, ...updatedFields, updated_at: new Date().toISOString() };
+    supabase.auth.getSession().then(({ data: { session } }) => applySession(session));
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user?.id) {
+        const timestamp = String(Date.now());
+        try {
+          localStorage.setItem(`sim-session-start:${session.user.id}`, timestamp);
+          localStorage.setItem(`sim-last-active:${session.user.id}`, timestamp);
+        } catch { /* Session setup can continue without browser storage. */ }
       }
-      return a;
+      // Defer database work so Supabase's auth callback can finish first.
+      setTimeout(() => applySession(session), 0);
     });
 
-    setAparatList(updated);
-    localStorage.setItem('cached_aparat_list', JSON.stringify(updated));
-    window.dispatchEvent(new Event('aparat-list-updated'));
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
+    };
+  }, [fetchProfile]);
 
-    // Jika yang diupdate adalah profil yang sedang login
-    if (profile?.id === id) {
-      const activeProf = { ...profile, ...updatedFields };
-      setProfile(activeProf);
-      localStorage.setItem('sim_aparat_active_profile', JSON.stringify(activeProf));
-    }
+  useEffect(() => {
+    if (!user || !profile) return undefined;
+    const channel = supabase
+      .channel(`profile-sync-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async (payload) => {
+        if (profile.role === 'admin' || payload.new?.user_id === user.id || payload.old?.user_id === user.id) {
+          await fetchProfile(user.id);
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [user?.id, profile?.id, profile?.role, fetchProfile]);
 
+  useEffect(() => {
+    if (!user?.id || !profile) return undefined;
+    const id = user.id;
+    const activeKey = `sim-last-active:${id}`;
+    const startedKey = `sim-session-start:${id}`;
+    const now = Date.now();
     try {
-      await supabase.from('profiles').update(updatedFields).eq('id', id);
-    } catch (e) {
-      console.warn('Gagal update aparat di server:', e);
+      if (!localStorage.getItem(startedKey)) localStorage.setItem(startedKey, String(now));
+      if (!localStorage.getItem(activeKey)) localStorage.setItem(activeKey, String(now));
+    } catch { /* Session still expires in memory if storage is unavailable. */ }
+    let lastWrite = 0;
+    let memoryStartedAt = now;
+    let memoryLastActiveAt = now;
+    let expiring = false;
+    const readTime = (key, fallback) => {
+      try {
+        const value = Number(localStorage.getItem(key));
+        return Number.isFinite(value) && value > 0 ? value : fallback;
+      } catch { return fallback; }
+    };
+    const expireIfNeeded = () => {
+      const current = Date.now();
+      const started = readTime(startedKey, memoryStartedAt);
+      const lastActive = readTime(activeKey, memoryLastActiveAt);
+      if (current - started >= SESSION_MAX_AGE_MS || current - lastActive >= IDLE_TIMEOUT_MS) {
+        if (expiring) return true;
+        expiring = true;
+        try { sessionStorage.setItem('sim-session-expired', '1'); } catch { /* Optional UX notice only. */ }
+        void logout();
+        return true;
+      }
+      return false;
+    };
+    const markActivity = () => {
+      const current = Date.now();
+      if (expireIfNeeded()) return;
+      if (current - lastWrite < 15000) return;
+      lastWrite = current;
+      memoryLastActiveAt = current;
+      try { localStorage.setItem(activeKey, String(current)); } catch { /* Ignore local storage failures. */ }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && !expireIfNeeded()) markActivity();
+    };
+    const timer = window.setInterval(expireIfNeeded, 15000);
+    const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, markActivity, { passive: true }));
+    window.addEventListener('storage', expireIfNeeded);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, markActivity));
+      window.removeEventListener('storage', expireIfNeeded);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [user?.id, profile?.id, logout]);
+
+  const loginWithPin = async (pin) => {
+    const { data, error } = await supabase.functions.invoke('pin-login', { body: { pin } });
+    if (error || !data?.token_hash) return { success: false, message: data?.message || 'PIN tidak valid atau layanan login belum dikonfigurasi.' };
+    const { data: authData, error: authError } = await supabase.auth.verifyOtp({ token_hash: data.token_hash, type: 'magiclink' });
+    if (authError) return { success: false, message: 'Login gagal diselesaikan. Coba lagi atau hubungi admin.' };
+    const accountProfile = await fetchProfile(authData.user.id);
+    if (!accountProfile) {
+      await supabase.auth.signOut();
+      return { success: false, message: 'Akun ini belum ditautkan ke profil aparat. Hubungi admin desa.' };
     }
+    return { success: true, profile: accountProfile };
   };
+
+  const saveAparat = async (newProfile, pin, id) => {
+    const { data, error } = await supabase.functions.invoke('manage-aparat', {
+      body: { profile: newProfile, pin: pin || undefined, id: id || undefined },
+    });
+    if (error || data?.error) throw new Error(data?.error || error?.message || 'Gagal menyimpan aparat.');
+    const { error: auditError } = await supabase.from('audit_logs').insert({
+      actor_user_id: user?.id,
+      actor_name: profile?.nama_lengkap || 'Admin',
+      actor_role: profile?.role || 'admin',
+      action: !id ? 'APARAT_CREATE' : pin ? 'PIN_RESET' : 'APARAT_UPDATE',
+      entity: 'profiles',
+      record_id: String(id || newProfile.username || 'akun-baru'),
+      changed_fields: !id ? ['akun_aparat'] : pin ? ['pin'] : ['profil_aparat'],
+    });
+    if (auditError) console.warn('Akun tersimpan, tetapi audit log gagal dicatat:', auditError.message);
+    await fetchAparatList();
+    if (id && profile?.id === id) await fetchProfile(user.id);
+    return data;
+  };
+
+  const updateAparat = (id, fields, pin) => saveAparat(fields, pin, id);
+  const addAparat = (newProfile, pin) => saveAparat(newProfile, pin);
 
   const deleteAparat = async (id) => {
-    const updated = aparatList.filter((a) => a.id !== id);
-    setAparatList(updated);
-    localStorage.setItem('cached_aparat_list', JSON.stringify(updated));
-    window.dispatchEvent(new Event('aparat-list-updated'));
-
-    try {
-      await supabase.from('profiles').delete().eq('id', id);
-    } catch (e) {
-      console.warn('Gagal hapus aparat di server:', e);
-    }
-  };
-
-  const resetPinAparat = async (id, newPin = '123456') => {
-    await updateAparat(id, { pin: newPin });
-  };
-
-  const loginDemo = (demoProf) => {
-    localStorage.setItem('sim_aparat_active_profile', JSON.stringify(demoProf));
-    setUser({ id: demoProf.id, username: demoProf.username });
-    setProfile(demoProf);
-    setIsDemoMode(true);
-  };
-
-  const logout = async () => {
-    localStorage.removeItem('cached_profile');
-    localStorage.removeItem('sim_aparat_active_profile');
-    setIsDemoMode(false);
-    setUser(null);
-    setProfile(null);
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.warn('Sign out warning:', e);
-    }
+    const { data, error } = await supabase.functions.invoke('manage-aparat', { body: { action: 'delete', id } });
+    if (error || data?.error) throw new Error(data?.error || error?.message || 'Gagal menghapus aparat.');
+    const { error: auditError } = await supabase.from('audit_logs').insert({
+      actor_user_id: user?.id,
+      actor_name: profile?.nama_lengkap || 'Admin',
+      actor_role: profile?.role || 'admin',
+      action: 'APARAT_DELETE',
+      entity: 'profiles',
+      record_id: String(id),
+      changed_fields: ['akun_aparat'],
+    });
+    if (auditError) console.warn('Akun terhapus, tetapi audit log gagal dicatat:', auditError.message);
+    await fetchAparatList();
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        aparatList,
-        loading,
-        isOnline,
-        isDemoMode,
-        loginWithPin,
-        addAparat,
-        updateAparat,
-        deleteAparat,
-        resetPinAparat,
-        fetchProfile,
-        fetchAparatList,
-        loginDemo,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={{ user, profile, aparatList, loading, isOnline, loginWithPin, updateAparat, addAparat, saveAparat, deleteAparat, fetchProfile, fetchAparatList, logout }}>
       {children}
     </AuthContext.Provider>
   );
