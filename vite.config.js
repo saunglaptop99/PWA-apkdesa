@@ -15,7 +15,7 @@ export default defineConfig({
       devOptions: {
         enabled: true,
       },
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'bekasikab.png'],
+      includeAssets: ['favicon-v2.ico', 'apple-touch-icon-v2.png', 'masked-icon.svg', 'bekasikab.png'],
       manifest: {
         name: 'SIM Aparat Desa PWA',
         short_name: 'ApkDesa',
@@ -26,18 +26,18 @@ export default defineConfig({
         orientation: 'portrait',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'pwa-192-v2.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'pwa-512-v2.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-maskable-512x512.png',
+            src: 'pwa-maskable-512-v2.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
