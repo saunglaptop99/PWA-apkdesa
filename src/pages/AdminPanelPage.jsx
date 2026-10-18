@@ -22,8 +22,10 @@ import {
   Activity,
   RefreshCw,
   Clock3,
+  Database,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import DataBackupPanel from '../components/admin/DataBackupPanel';
 
 const wilayahSlug = (value) => String(value || '')
   .normalize('NFKD')
@@ -49,7 +51,7 @@ const auditActionLabel = (action) => ({
 }[action] || action);
 
 export default function AdminPanelPage() {
-  const { aparatList, addAparat, updateAparat, deleteAparat } = useAuth();
+  const { profile, aparatList, addAparat, updateAparat, deleteAparat } = useAuth();
   const {
     pengaturanDesa,
     updatePengaturanDesa,
@@ -64,7 +66,7 @@ export default function AdminPanelPage() {
     loading: desaLoading,
   } = useDesa();
 
-  const [activeTab, setActiveTab] = useState('aparat'); // 'aparat' | 'wilayah' | 'desa'
+  const [activeTab, setActiveTab] = useState('aparat'); // admin-only management sections
 
   // Form Pengaturan Desa
   const [desaForm, setDesaForm] = useState({
@@ -432,7 +434,7 @@ export default function AdminPanelPage() {
       <BrandPageHeader title="Kelola Desa & Hak Akses" subtitle="Pengaturan desa, wilayah tugas, dan akun aparat" className="admin-topbar" />
 
       {/* Tab Navigasi 3 Pilihan */}
-      <div className="flex bg-slate-200/80 p-1 rounded-2xl mb-3 text-[10px] sm:text-[11px] font-bold text-slate-600">
+      <div className="flex overflow-x-auto bg-slate-200/80 p-1 rounded-2xl mb-3 text-[10px] sm:text-[11px] font-bold text-slate-600">
         <button
           onClick={() => setActiveTab('aparat')}
           className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${
@@ -468,10 +470,17 @@ export default function AdminPanelPage() {
         </button>
         <button
           onClick={() => setActiveTab('aktivitas')}
-          className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${activeTab === 'aktivitas' ? 'bg-white text-teal-800 shadow-sm' : 'hover:text-slate-800'}`}
+          className={`min-w-fit flex-1 px-2 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${activeTab === 'aktivitas' ? 'bg-white text-teal-800 shadow-sm' : 'hover:text-slate-800'}`}
         >
           <Activity size={13} />
           <span>Aktivitas</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('backup')}
+          className={`min-w-fit flex-1 px-2 py-2 rounded-xl flex items-center justify-center gap-1 transition-all ${activeTab === 'backup' ? 'bg-white text-teal-800 shadow-sm' : 'hover:text-slate-800'}`}
+        >
+          <Database size={13} />
+          <span>Backup</span>
         </button>
       </div>
 
@@ -640,6 +649,8 @@ export default function AdminPanelPage() {
           ))}
         </section>
       )}
+
+      {activeTab === 'backup' && <DataBackupPanel profile={profile} />}
 
       {/* TAB 3: PENGATURAN IDENTITAS DESA & KEPALA DESA */}
       {activeTab === 'desa' && (

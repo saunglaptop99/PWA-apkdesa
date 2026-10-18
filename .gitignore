@@ -29,3 +29,5 @@ supabase/.temp/
 *.sw?
 
 .vercel
+
+supabase-backups/
