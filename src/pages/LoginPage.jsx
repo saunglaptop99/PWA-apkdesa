@@ -27,7 +27,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-page min-h-screen flex flex-col justify-center px-5 py-8">
+    <div className="login-page min-h-screen flex flex-col px-5 py-8">
       <div className="login-content w-full max-w-md mx-auto">
         <div className="login-header mb-7">
           <img className="login-emblem" src={`${import.meta.env.BASE_URL}bekasikab.png`} alt="Lambang Kabupaten Bekasi" />

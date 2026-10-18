@@ -121,8 +121,15 @@
 .dashboard-sync-panel { display: flex; align-items: flex-start; gap: 9px; padding: 11px 13px; }
 .dashboard-sync-panel > div:first-child { margin-bottom: 0 !important; }
 
-.login-page { background: var(--paper); }
-.login-content { max-width: 448px; }
+.login-page {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  background: var(--paper);
+}
+.login-content { max-width: 448px; margin-block: auto; }
 .login-header { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .login-emblem { display: block; width: 72px; height: 82px; object-fit: contain; margin: 0 auto 12px; }
 .login-kabupaten { color: #8c4b33; font-size: 10px; line-height: 1.4; font-weight: 800; letter-spacing: 0.2em; }
