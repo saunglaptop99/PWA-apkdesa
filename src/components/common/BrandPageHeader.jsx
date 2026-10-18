@@ -4,7 +4,7 @@ export default function BrandPageHeader({ title, subtitle, trailing, className =
   return (
     <header className={`brand-page-header ${sticky ? 'is-sticky' : ''} ${className}`}>
       <div className="brand-page-heading">
-        <img src="/bekasikab.png" alt="Lambang Kabupaten Bekasi" />
+        <img src={`${import.meta.env.BASE_URL}bekasikab.png`} alt="Lambang Kabupaten Bekasi" />
         <div className="min-w-0">
           <h1>{title}</h1>
           {subtitle && <p>{subtitle}</p>}

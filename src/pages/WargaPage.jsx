@@ -330,7 +330,7 @@ export default function WargaPage({ navigateToLayanan }) {
         {/* Baris 1: Judul Halaman (Full Width, Tidak Terpotong) */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img className="tab-brand-mark" src="/bekasikab.png" alt="Lambang Kabupaten Bekasi" />
+            <img className="tab-brand-mark" src={`${import.meta.env.BASE_URL}bekasikab.png`} alt="Lambang Kabupaten Bekasi" />
             <div>
               <h2 className="text-base sm:text-lg font-black text-slate-800 tracking-tight whitespace-nowrap">
                 Data Kependudukan

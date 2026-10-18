@@ -30,7 +30,7 @@ export default function LoginPage() {
     <div className="login-page min-h-screen flex flex-col justify-center px-5 py-8">
       <div className="login-content w-full max-w-md mx-auto">
         <div className="login-header mb-7">
-          <img className="login-emblem" src="/bekasikab.png" alt="Lambang Kabupaten Bekasi" />
+          <img className="login-emblem" src={`${import.meta.env.BASE_URL}bekasikab.png`} alt="Lambang Kabupaten Bekasi" />
           <p className="login-kabupaten">KABUPATEN BEKASI</p>
           <p className="login-overline">Portal Aparatur Desa</p>
           <h1 className="login-title">{pengaturanDesa?.nama_desa?.trim() || 'Nama Desa'}</h1>
