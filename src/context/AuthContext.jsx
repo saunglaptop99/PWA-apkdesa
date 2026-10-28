@@ -211,7 +211,22 @@ export const AuthProvider = ({ children }) => {
 
   const loginWithPin = async (pin) => {
     const { data, error } = await supabase.functions.invoke('pin-login', { body: { pin } });
-    if (error || !data?.token_hash) return { success: false, message: data?.message || 'PIN tidak valid atau layanan login belum dikonfigurasi.' };
+    if (error) {
+      // FunctionsHttpError keeps the Edge Function response on `context`.
+      // Surface its safe, user-facing message instead of masking every 4xx/5xx
+      // response as an invalid PIN. Never include the submitted PIN in logs/UI.
+      try {
+        const response = error.context;
+        const body = response && typeof response.clone === 'function'
+          ? await response.clone().json()
+          : null;
+        if (typeof body?.message === 'string' && body.message.trim()) {
+          return { success: false, message: body.message };
+        }
+      } catch { /* Fall back to a generic connectivity/service message. */ }
+      return { success: false, message: 'Layanan login tidak dapat dihubungi. Periksa koneksi atau coba lagi beberapa saat.' };
+    }
+    if (!data?.token_hash) return { success: false, message: data?.message || 'Layanan login memberi respons yang tidak lengkap. Hubungi admin desa.' };
     const { data: authData, error: authError } = await supabase.auth.verifyOtp({ token_hash: data.token_hash, type: 'magiclink' });
     if (authError) return { success: false, message: 'Login gagal diselesaikan. Coba lagi atau hubungi admin.' };
     const accountProfile = await fetchProfile(authData.user.id);
