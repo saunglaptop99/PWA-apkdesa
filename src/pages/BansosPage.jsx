@@ -68,7 +68,7 @@ export default function BansosPage() {
       const { data: penData, error: penErr } = await fetchAllRows(() => supabase
         .from('penerima_bansos')
         .select(
-          'id, tanggal_terima, status_verifikasi, bansos_id, warga:warga_id (id, nama, nik, rt, rw, dusun), bantuan_sosial:bansos_id (nama_program)'
+          'id, tanggal_verifikasi, tanggal_terima, status_verifikasi, bansos_id, created_at, warga:warga_id (id, nama, nik, rt, rw, dusun), bantuan_sosial:bansos_id (nama_program)'
         )
         .order('tanggal_terima', { ascending: false })
         .order('id', { ascending: false }));
