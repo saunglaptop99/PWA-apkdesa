@@ -135,7 +135,8 @@ export default function BansosPage() {
       const { error } = await supabase.from('penerima_bansos').upsert({
         bansos_id: program.id,
         warga_id: warga.id,
-        tanggal_terima: new Date().toISOString().slice(0, 10),
+        tanggal_verifikasi: new Date().toISOString().slice(0, 10),
+        tanggal_terima: null,
         status_verifikasi: 'Diverifikasi',
       }, { onConflict: 'bansos_id,warga_id' });
       if (error) throw error;
@@ -143,6 +144,26 @@ export default function BansosPage() {
       window.dispatchEvent(new Event('bansos-updated'));
     } catch (error) {
       alert(`Gagal menyimpan verifikasi ke server: ${error.message}`);
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
+  const handleMarkDistributed = async (recipient) => {
+    if (profile?.role !== 'admin' || recipient.status_verifikasi !== 'Diverifikasi') return;
+    const confirmed = window.confirm(`Tandai bantuan untuk ${recipient.warga?.nama || 'warga ini'} sebagai sudah disalurkan?`);
+    if (!confirmed) return;
+    setVerifyingId(recipient.id);
+    try {
+      const { error } = await supabase.from('penerima_bansos').update({
+        status_verifikasi: 'Disalurkan',
+        tanggal_terima: new Date().toISOString().slice(0, 10),
+      }).eq('id', recipient.id);
+      if (error) throw error;
+      await loadData();
+      window.dispatchEvent(new Event('bansos-updated'));
+    } catch (error) {
+      alert(`Gagal memperbarui status penyaluran: ${error.message}`);
     } finally {
       setVerifyingId(null);
     }
@@ -344,34 +365,58 @@ export default function BansosPage() {
       {/* TAB 3: PENERIMA BANSOS */}
       {activeSubTab === 'penerima' && (
         <div className="space-y-2.5">
-          {penerimaList.map((pen) => (
-            <div
-              key={pen.id}
-              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-sm"
-            >
-              <div className="flex justify-between items-start gap-2">
-                <div>
-                  <h4 className="font-bold text-slate-900 text-xs sm:text-sm">
-                    {pen.warga?.nama || 'Warga Penerima'}
-                  </h4>
-                  <p className="text-[11px] font-mono text-slate-400">NIK: {pen.warga?.nik || '-'}</p>
-                  <p className="text-[10.5px] text-teal-700 font-semibold mt-1">
-                    {pen.bantuan_sosial?.nama_program || 'Program Bantuan Sosial'}
-                  </p>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                  <CheckCircle2 size={11} />
-                  <span>{pen.status_verifikasi || 'Disalurkan'}</span>
-                </span>
-              </div>
-              <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400">
-                <span>Tanggal: {pen.tanggal_terima}</span>
-                <span>
-                  RT {pen.warga?.rt || '01'} / RW {pen.warga?.rw || '01'} ({pen.warga?.dusun || 'Desa'})
-                </span>
-              </div>
+          {!loading && penerimaList.length === 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
+              Belum ada warga yang tercatat sebagai penerima program bantuan.
             </div>
-          ))}
+          )}
+          {penerimaList.map((pen) => {
+            const isDistributed = pen.status_verifikasi === 'Disalurkan';
+            const isVerified = pen.status_verifikasi === 'Diverifikasi';
+            const statusDate = isDistributed
+              ? pen.tanggal_terima
+              : isVerified
+                ? pen.tanggal_verifikasi || pen.created_at?.slice(0, 10)
+                : pen.tanggal_terima;
+            return (
+              <div
+                key={pen.id}
+                className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-sm"
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-xs sm:text-sm">
+                      {pen.warga?.nama || 'Warga Penerima'}
+                    </h4>
+                    <p className="text-[11px] font-mono text-slate-400">NIK: {pen.warga?.nik || '-'}</p>
+                    <p className="text-[10.5px] text-teal-700 font-semibold mt-1">
+                      {pen.bantuan_sosial?.nama_program || 'Program Bantuan Sosial'}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${isDistributed ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800'}`}>
+                    {isDistributed && <CheckCircle2 size={11} />}
+                    <span>{pen.status_verifikasi || 'Status belum ditentukan'}</span>
+                  </span>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400">
+                  <span>{isDistributed ? 'Tanggal disalurkan' : isVerified ? 'Tanggal diverifikasi' : 'Tanggal'}: {statusDate || '-'}</span>
+                  <span>
+                    RT {pen.warga?.rt || '01'} / RW {pen.warga?.rw || '01'} ({pen.warga?.dusun || 'Desa'})
+                  </span>
+                </div>
+                {profile?.role === 'admin' && isVerified && (
+                  <button
+                    type="button"
+                    onClick={() => handleMarkDistributed(pen)}
+                    disabled={verifyingId === pen.id}
+                    className="mt-3 w-full rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                  >
+                    {verifyingId === pen.id ? 'Menyimpan…' : 'Tandai sudah disalurkan'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

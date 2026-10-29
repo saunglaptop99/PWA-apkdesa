@@ -81,6 +81,7 @@ Buka **Supabase SQL Editor** pada project Supabase Anda. Untuk database baru mau
 5. `supabase/migration_pin_auth.sql`
 6. `supabase/migration_surat_layanan.sql`
 7. `supabase/migration_security_audit.sql`
+8. `supabase/migration_bansos_status_workflow.sql`
 
 Jika tabel warga berasal dari versi yang sangat lama, `schema.sql` menambahkan kolom yang hilang melalui `ADD COLUMN IF NOT EXISTS`; `migration_add_demographics.sql` tersedia sebagai migrasi tambahan untuk deployment lama.
 

@@ -208,10 +208,13 @@ CREATE TABLE IF NOT EXISTS public.penerima_bansos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bansos_id UUID REFERENCES public.bantuan_sosial(id) ON DELETE CASCADE,
     warga_id UUID REFERENCES public.warga(id) ON DELETE CASCADE,
-    tanggal_terima DATE DEFAULT CURRENT_DATE,
-    status_verifikasi TEXT DEFAULT 'Disalurkan',
+    tanggal_verifikasi DATE,
+    tanggal_terima DATE,
+    status_verifikasi TEXT NOT NULL DEFAULT 'Diverifikasi',
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(bansos_id, warga_id)
+    UNIQUE(bansos_id, warga_id),
+    CONSTRAINT penerima_bansos_status_check
+        CHECK (status_verifikasi IN ('Diverifikasi', 'Disalurkan'))
 );
 
 -- 9. AKTIFKAN ROW LEVEL SECURITY (RLS)

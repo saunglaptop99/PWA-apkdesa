@@ -37,6 +37,7 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
     const cachedWarga = filterByProfileScope(readUserCache(user?.id, 'dashboard-warga', []), profile)
       .filter((w) => w.status_kependudukan === 'aktif');
     const cachedRecipients = readUserCache(user?.id, 'bansos-penerima', [])
+      .filter((row) => row.status_verifikasi === 'Disalurkan')
       .filter((row) => filterByProfileScope([row.warga].filter(Boolean), profile).length > 0);
     setStats({
       totalWarga: cachedWarga.length,
@@ -84,7 +85,8 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
 
       const { count: bansosCount, error: bansosError } = await supabase
         .from('penerima_bansos')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('status_verifikasi', 'Disalurkan');
       if (bansosError) throw bansosError;
 
       setStats({
@@ -231,7 +233,7 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
           <div className="text-2xl font-black text-emerald-700 tracking-tight">
             {stats.penerimaBansos}
           </div>
-          <span className="text-[10px] text-slate-400 block mt-1">Penerima terdaftar</span>
+          <span className="text-[10px] text-slate-400 block mt-1">Bantuan sudah disalurkan</span>
         </div>
       </div>
       </section>
