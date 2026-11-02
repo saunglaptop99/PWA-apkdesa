@@ -173,13 +173,16 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan, navigat
 
       {/* Ringkasan identitas aparat dan wilayah */}
       <section className="dashboard-welcome dashboard-hero mb-4">
-        <div className="hero-kicker"><span className="hero-live-dot" />{greeting}</div>
-        <h1>{profile?.nama_lengkap || 'Aparat Desa'}</h1>
-        <div className="hero-role">{roleTitle}</div>
-        <div className="hero-divider" />
-        <div className="hero-bottom">
-          <div className="hero-location"><MapPin size={14} /><span>{profile?.wilayah_rt ? `RT ${profile.wilayah_rt} / ` : ''}{profile?.wilayah_rw ? `RW ${profile.wilayah_rw} · ` : ''}{profile?.wilayah_dusun ? `Dusun ${profile.wilayah_dusun}` : 'Seluruh desa'}</span></div>
-          {pengaturanDesa?.nama_kepala_desa && <p className="hero-head-village">Kades · {pengaturanDesa.nama_kepala_desa}</p>}
+        <img className="dashboard-headman-photo" src={`${import.meta.env.BASE_URL}kepala-desa-beranda.png`} alt="" aria-hidden="true" />
+        <div className="dashboard-hero-content">
+          <div className="hero-kicker"><span className="hero-live-dot" />{greeting}</div>
+          <h1>{profile?.nama_lengkap || 'Aparat Desa'}</h1>
+          <div className="hero-role">{roleTitle}</div>
+          <div className="hero-divider" />
+          <div className="hero-bottom">
+            <div className="hero-location"><MapPin size={14} /><span>{profile?.wilayah_rt ? `RT ${profile.wilayah_rt} / ` : ''}{profile?.wilayah_rw ? `RW ${profile.wilayah_rw} · ` : ''}{profile?.wilayah_dusun ? `Dusun ${profile.wilayah_dusun}` : 'Seluruh desa'}</span></div>
+            {pengaturanDesa?.nama_kepala_desa && <p className="hero-head-village">Kades · {pengaturanDesa.nama_kepala_desa}</p>}
+          </div>
         </div>
       </section>
 
