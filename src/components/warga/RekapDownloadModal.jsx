@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx';
 import {
   X,
   Download,
@@ -198,9 +197,10 @@ export default function RekapDownloadModal({
   }, [allWarga]);
 
   // EXPORT 1: Unduh Excel khusus satu Dusun
-  const handleDownloadDusun = (dusunItem) => {
+  const handleDownloadDusun = async (dusunItem) => {
     setDownloading(true);
     try {
+      const XLSX = await import('xlsx');
       const rows = dusunItem.wargaList.map(formatWargaRow);
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = autoFitCols(rows);
@@ -220,9 +220,10 @@ export default function RekapDownloadModal({
   };
 
   // EXPORT 2: Unduh Excel khusus satu RT/RW
-  const handleDownloadRtRw = (rtRwItem) => {
+  const handleDownloadRtRw = async (rtRwItem) => {
     setDownloading(true);
     try {
+      const XLSX = await import('xlsx');
       const rows = rtRwItem.wargaList.map(formatWargaRow);
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = autoFitCols(rows);
@@ -243,9 +244,10 @@ export default function RekapDownloadModal({
   };
 
   // EXPORT 3: Unduh Master Laporan Rekapitulasi Lengkap Multi-Sheet
-  const handleDownloadMasterRekap = () => {
+  const handleDownloadMasterRekap = async () => {
     setDownloading(true);
     try {
+      const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
 
       // Sheet 1: Rekap Dusun
@@ -302,13 +304,14 @@ export default function RekapDownloadModal({
   };
 
   // EXPORT 4: Unduh Data Warga yang Sedang Terfilter di Halaman
-  const handleDownloadFiltered = () => {
+  const handleDownloadFiltered = async () => {
     if (!filteredWarga || filteredWarga.length === 0) {
       alert('Tidak ada data warga yang sesuai filter.');
       return;
     }
     setDownloading(true);
     try {
+      const XLSX = await import('xlsx');
       const rows = filteredWarga.map(formatWargaRow);
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = autoFitCols(rows);

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useDesa } from '../context/DesaContext';
 import { readUserCache, writeUserCache, filterByProfileScope } from '../lib/userCache';
 import BrandPageHeader from '../components/common/BrandPageHeader';
+import { groupResidentsByArea, summarizeResidents } from '../lib/populationStats';
 import {
   Users,
   AlertTriangle,
@@ -28,14 +29,17 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
     wargaMiskin: 0,
     wargaRentan: 0,
     penerimaBansos: 0,
-    totalKK: 0,
+    totalRumah: 0,
+    totalKepalaKeluarga: 0,
   });
+  const [areaStats, setAreaStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statsSource, setStatsSource] = useState('loading');
 
   const setCachedStats = () => {
     const cachedWarga = filterByProfileScope(readUserCache(user?.id, 'dashboard-warga', []), profile)
       .filter((w) => w.status_kependudukan === 'aktif');
+    const populationSummary = summarizeResidents(cachedWarga);
     const cachedRecipients = readUserCache(user?.id, 'bansos-penerima', [])
       .filter((row) => row.status_verifikasi === 'Disalurkan')
       .filter((row) => filterByProfileScope([row.warga].filter(Boolean), profile).length > 0);
@@ -44,8 +48,10 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
       wargaMiskin: cachedWarga.filter((w) => w.status_ekonomi === 'miskin').length,
       wargaRentan: cachedWarga.filter((w) => w.status_ekonomi === 'rentan').length,
       penerimaBansos: cachedRecipients.length,
-      totalKK: new Set(cachedWarga.map((w) => w.no_kk).filter(Boolean)).size,
+      totalRumah: populationSummary.homes,
+      totalKepalaKeluarga: populationSummary.headsOfFamily,
     });
+    setAreaStats(groupResidentsByArea(cachedWarga));
   };
 
   const loadStats = async () => {
@@ -53,7 +59,7 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
     try {
       let wargaQuery = supabase
         .from('warga')
-        .select('id, no_kk, status_ekonomi, dusun, rw, rt, status_kependudukan')
+        .select('id, no_kk, shdk, alamat_detail, status_ekonomi, dusun, rw, rt, status_kependudukan')
         .eq('status_kependudukan', 'aktif');
 
       // Terapkan isolasi wilayah
@@ -81,7 +87,8 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
       const total = scopedWarga.length;
       const miskin = scopedWarga.filter((w) => w.status_ekonomi === 'miskin').length;
       const rentan = scopedWarga.filter((w) => w.status_ekonomi === 'rentan').length;
-      const uniqueKK = new Set(scopedWarga.map((w) => w.no_kk).filter(Boolean)).size;
+      const populationSummary = summarizeResidents(scopedWarga);
+      setAreaStats(groupResidentsByArea(scopedWarga));
 
       const { count: bansosCount, error: bansosError } = await supabase
         .from('penerima_bansos')
@@ -94,7 +101,8 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
         wargaMiskin: miskin,
         wargaRentan: rentan,
         penerimaBansos: bansosCount || 0,
-        totalKK: uniqueKK,
+        totalRumah: populationSummary.homes,
+        totalKepalaKeluarga: populationSummary.headsOfFamily,
       });
       setStatsSource('database');
     } catch (err) {
@@ -145,6 +153,7 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
     : 0;
   const greeting = new Date().getHours() < 11 ? 'Selamat pagi' : new Date().getHours() < 15 ? 'Selamat siang' : new Date().getHours() < 18 ? 'Selamat sore' : 'Selamat malam';
   const namaDesa = pengaturanDesa?.nama_desa?.trim();
+  const residentsWithoutAddress = areaStats.reduce((total, area) => total + area.residentsWithoutAddress, 0);
 
   return (
     <div className="app-page dashboard-page pb-28 pt-4 px-4 max-w-md mx-auto">
@@ -218,9 +227,9 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
             </div>
           </div>
           <div className="text-2xl font-black text-slate-900 tracking-tight">
-            {stats.totalKK}
+            {stats.totalKepalaKeluarga}
           </div>
-          <span className="text-[10px] text-slate-400 block mt-1">Kartu Keluarga terdaftar</span>
+          <span className="text-[10px] text-slate-400 block mt-1">Warga berstatus kepala keluarga</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-sm">
@@ -236,6 +245,31 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
           <span className="text-[10px] text-slate-400 block mt-1">Bantuan sudah disalurkan</span>
         </div>
       </div>
+      </section>
+
+      <section className="dashboard-panel mb-3" aria-label="Sebaran warga per RT dan RW">
+        <div className="section-heading">
+          <h2>Sebaran RT / RW</h2>
+          <span>{stats.totalRumah} rumah · {stats.totalKepalaKeluarga} kepala KK</span>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.8fr))] gap-2 border-b border-slate-200 px-2 pb-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+          <span>RT / RW</span><span className="text-right">Warga</span><span className="text-right">Rumah</span><span className="text-right">Kepala KK</span>
+        </div>
+        <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+          {areaStats.map((area) => (
+            <div key={`${area.dusun}-${area.rw}-${area.rt}`} className="grid grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.8fr))] items-center gap-2 px-2 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-bold text-slate-800">RT {area.rt} / RW {area.rw}</p>
+                <p className="truncate text-[9px] text-slate-500">Dusun {area.dusun}</p>
+              </div>
+              <span className="text-right text-xs font-bold text-slate-800">{area.residents}</span>
+              <span className="text-right text-xs font-semibold text-teal-800">{area.homes}</span>
+              <span className="text-right text-xs font-semibold text-slate-700">{area.headsOfFamily}</span>
+            </div>
+          ))}
+          {!areaStats.length && <p className="px-2 py-5 text-center text-[11px] text-slate-500">Belum ada data warga untuk wilayah ini.</p>}
+        </div>
+        <p className="mt-2 border-t border-slate-100 pt-2 text-[9px] leading-relaxed text-slate-500">Rumah dihitung dari alamat lengkap yang terisi dan berbeda. {residentsWithoutAddress} warga belum memiliki alamat lengkap sehingga belum masuk hitungan rumah.</p>
       </section>
 
       {/* Progress Distribusi Ekonomi */}

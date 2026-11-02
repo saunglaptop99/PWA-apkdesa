@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import jsPDF from 'jspdf';
 import { useDesa } from '../../context/DesaContext';
 import { Printer, X, FileCheck, CheckCircle2 } from 'lucide-react';
 
@@ -69,6 +68,7 @@ export default function SuratModal({ warga, onClose, userProfile, requestRecord,
       alert('Isi nomor surat resmi yang sudah ditetapkan desa sebelum membuat PDF.');
       return;
     }
+    const { default: jsPDF } = await import('jspdf');
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',

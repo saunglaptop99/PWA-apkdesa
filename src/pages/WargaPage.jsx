@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useDesa } from '../context/DesaContext';
 import { readUserCache, writeUserCache, filterByProfileScope } from '../lib/userCache';
 import { fetchAllRows } from '../lib/fetchAllRows';
+import { summarizeResidents } from '../lib/populationStats';
 import {
   Search,
   FileText,
@@ -313,6 +314,7 @@ export default function WargaPage({ navigateToLayanan }) {
 
   // Logika Paginasi (Pagination)
   const totalItems = filtered.length;
+  const filteredSummary = useMemo(() => summarizeResidents(filtered), [filtered]);
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const validCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (validCurrentPage - 1) * pageSize;
@@ -664,6 +666,21 @@ export default function WargaPage({ navigateToLayanan }) {
             ? `Data Dusun ${profile.wilayah_dusun}`
             : 'Semua Wilayah Desa'}
         </span>
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 gap-2 px-1" aria-label="Ringkasan warga yang tampil">
+        <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
+          <p className="text-[9px] font-semibold text-slate-500">Rumah terdata</p>
+          <p className="mt-0.5 text-base font-extrabold text-teal-800">{filteredSummary.homes}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
+          <p className="text-[9px] font-semibold text-slate-500">Kepala keluarga</p>
+          <p className="mt-0.5 text-base font-extrabold text-slate-800">{filteredSummary.headsOfFamily}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
+          <p className="text-[9px] font-semibold text-slate-500">No. KK berbeda</p>
+          <p className="mt-0.5 text-base font-extrabold text-slate-800">{filteredSummary.familyCards}</p>
+        </div>
       </div>
 
       {/* TABEL DATA WARGA (RINGKAS & PRESISI: NO KK, NIK, NAMA - KLIK UNTUK DETAIL LENGKAP) */}

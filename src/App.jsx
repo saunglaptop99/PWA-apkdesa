@@ -1,14 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DesaProvider, useDesa } from './context/DesaContext';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import WargaPage from './pages/WargaPage';
-import LayananPage from './pages/LayananPage';
-import BansosPage from './pages/BansosPage';
-import MutasiPage from './pages/MutasiPage';
-import AdminPanelPage from './pages/AdminPanelPage';
-import ProfilPage from './pages/ProfilPage';
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const WargaPage = lazy(() => import('./pages/WargaPage'));
+const LayananPage = lazy(() => import('./pages/LayananPage'));
+const AdminPanelPage = lazy(() => import('./pages/AdminPanelPage'));
+const ProfilPage = lazy(() => import('./pages/ProfilPage'));
 import BottomNav from './components/common/BottomNav';
 import { WifiOff, ShieldCheck } from 'lucide-react';
 
@@ -61,6 +59,7 @@ function MainLayout() {
 
         {/* Tab Pages (Tersusun Rapi dalam 4 Pilar Layanan) */}
         <main className="flex-1 overflow-x-clip">
+          <Suspense fallback={<div className="app-loading min-h-[45vh] flex items-center justify-center text-xs font-semibold text-teal-800">Memuat halaman…</div>}>
           {activeTab === 'dashboard' && (
             <DashboardPage
               setActiveTab={setActiveTab}
@@ -73,6 +72,7 @@ function MainLayout() {
           {activeTab === 'mutasi' && <LayananPage defaultSubTab="mutasi" />}
           {activeTab === 'kelola' && profile?.role === 'admin' && <AdminPanelPage />}
           {activeTab === 'profil' && <ProfilPage setActiveTab={setActiveTab} />}
+          </Suspense>
         </main>
 
         {/* Shopee-style Bottom Navigation Bar */}

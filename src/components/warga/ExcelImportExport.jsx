@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabaseClient';
 import { useDesa } from '../../context/DesaContext';
 import { Download, Upload, FileSpreadsheet, Check, AlertCircle } from 'lucide-react';
@@ -12,12 +11,13 @@ export default function ExcelImportExport({ wargaList, onRefresh }) {
   const [importing, setImporting] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!wargaList || wargaList.length === 0) {
       alert('Tidak ada data warga untuk diexport.');
       return;
     }
 
+    const XLSX = await import('xlsx');
     const dataToExport = wargaList.map((w, index) => ({
       No: index + 1,
       NIK: String(w.nik || ''),
@@ -72,7 +72,8 @@ export default function ExcelImportExport({ wargaList, onRefresh }) {
     XLSX.writeFile(workbook, fileName);
   };
 
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
+    const XLSX = await import('xlsx');
     const headers = ['NIK', 'No_KK', 'Nama', 'Jenis_Kelamin', 'Tempat_Lahir', 'Tanggal_Lahir', 'Agama', 'Pekerjaan', 'SHDK', 'Dusun', 'RW', 'RT', 'Alamat_Detail', 'Ekonomi'];
     const worksheet = XLSX.utils.aoa_to_sheet([headers]);
     worksheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, header.length + 4) }));
@@ -107,6 +108,7 @@ export default function ExcelImportExport({ wargaList, onRefresh }) {
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
+        const XLSX = await import('xlsx');
         const bstr = evt.target.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
