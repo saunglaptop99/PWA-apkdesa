@@ -5,6 +5,8 @@ export function summarizeResidents(rows = []) {
   const familyCards = new Set();
   let headsOfFamily = 0;
   let residentsWithoutAddress = 0;
+  let lakiLaki = 0;
+  let perempuan = 0;
 
   for (const row of rows) {
     const address = normalizedAddress(row.alamat_detail);
@@ -13,6 +15,8 @@ export function summarizeResidents(rows = []) {
 
     if (row.no_kk) familyCards.add(String(row.no_kk).trim());
     if (row.shdk === 'Kepala Keluarga') headsOfFamily += 1;
+    if (row.jenis_kelamin === 'Laki-laki') lakiLaki += 1;
+    if (row.jenis_kelamin === 'Perempuan') perempuan += 1;
   }
 
   return {
@@ -21,6 +25,8 @@ export function summarizeResidents(rows = []) {
     headsOfFamily,
     familyCards: familyCards.size,
     residentsWithoutAddress,
+    lakiLaki,
+    perempuan,
   };
 }
 

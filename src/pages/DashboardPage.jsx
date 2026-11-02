@@ -20,7 +20,7 @@ import {
   Gift,
 } from 'lucide-react';
 
-export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
+export default function DashboardPage({ setActiveTab, navigateToLayanan, navigateToWarga }) {
   const { profile, user, isOnline } = useAuth();
   const { pengaturanDesa } = useDesa();
 
@@ -31,6 +31,8 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
     penerimaBansos: 0,
     totalRumah: 0,
     totalKepalaKeluarga: 0,
+    lakiLaki: 0,
+    perempuan: 0,
   });
   const [areaStats, setAreaStats] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +52,8 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
       penerimaBansos: cachedRecipients.length,
       totalRumah: populationSummary.homes,
       totalKepalaKeluarga: populationSummary.headsOfFamily,
+      lakiLaki: populationSummary.lakiLaki,
+      perempuan: populationSummary.perempuan,
     });
     setAreaStats(groupResidentsByArea(cachedWarga));
   };
@@ -59,7 +63,7 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
     try {
       let wargaQuery = supabase
         .from('warga')
-        .select('id, no_kk, shdk, alamat_detail, status_ekonomi, dusun, rw, rt, status_kependudukan')
+        .select('id, no_kk, shdk, alamat_detail, jenis_kelamin, status_ekonomi, dusun, rw, rt, status_kependudukan')
         .eq('status_kependudukan', 'aktif');
 
       // Terapkan isolasi wilayah
@@ -103,6 +107,8 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
         penerimaBansos: bansosCount || 0,
         totalRumah: populationSummary.homes,
         totalKepalaKeluarga: populationSummary.headsOfFamily,
+        lakiLaki: populationSummary.lakiLaki,
+        perempuan: populationSummary.perempuan,
       });
       setStatsSource('database');
     } catch (err) {
@@ -252,17 +258,24 @@ export default function DashboardPage({ setActiveTab, navigateToLayanan }) {
           <h2>Sebaran RT / RW</h2>
           <span>{stats.totalRumah} rumah · {stats.totalKepalaKeluarga} kepala KK</span>
         </div>
-        <div className="grid grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.8fr))] gap-2 border-b border-slate-200 px-2 pb-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
-          <span>RT / RW</span><span className="text-right">Warga</span><span className="text-right">Rumah</span><span className="text-right">Kepala KK</span>
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-50 px-2.5 py-2">
+          <span className="mr-auto text-[10px] font-semibold text-slate-500">Seluruh warga dalam cakupan Anda</span>
+          <button type="button" disabled={!stats.lakiLaki} onClick={() => navigateToWarga?.({ gender: 'Laki-laki' })} className="rounded-lg border border-sky-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-sky-800 disabled:opacity-50">Laki-laki {stats.lakiLaki || 0}</button>
+          <button type="button" disabled={!stats.perempuan} onClick={() => navigateToWarga?.({ gender: 'Perempuan' })} className="rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-rose-800 disabled:opacity-50">Perempuan {stats.perempuan || 0}</button>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1.05fr)_repeat(5,minmax(0,0.58fr))] gap-1.5 border-b border-slate-200 px-1.5 pb-2 text-[8px] font-bold uppercase tracking-wide text-slate-500">
+          <span>RT / RW</span><span className="text-right">Warga</span><span className="text-right">L</span><span className="text-right">P</span><span className="text-right">Rumah</span><span className="text-right">KK</span>
         </div>
         <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
           {areaStats.map((area) => (
-            <div key={`${area.dusun}-${area.rw}-${area.rt}`} className="grid grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.8fr))] items-center gap-2 px-2 py-2.5">
+            <div key={`${area.dusun}-${area.rw}-${area.rt}`} className="grid grid-cols-[minmax(0,1.05fr)_repeat(5,minmax(0,0.58fr))] items-center gap-1.5 px-1.5 py-2.5">
               <div className="min-w-0">
                 <p className="truncate text-[11px] font-bold text-slate-800">RT {area.rt} / RW {area.rw}</p>
                 <p className="truncate text-[9px] text-slate-500">Dusun {area.dusun}</p>
               </div>
               <span className="text-right text-xs font-bold text-slate-800">{area.residents}</span>
+              <button type="button" disabled={!area.lakiLaki} aria-label={`Lihat ${area.lakiLaki} warga laki-laki RT ${area.rt} RW ${area.rw}`} onClick={() => navigateToWarga?.({ dusun: area.dusun, rw: area.rw, rt: area.rt, gender: 'Laki-laki' })} className="text-right text-xs font-semibold text-sky-800 disabled:opacity-40">{area.lakiLaki}</button>
+              <button type="button" disabled={!area.perempuan} aria-label={`Lihat ${area.perempuan} warga perempuan RT ${area.rt} RW ${area.rw}`} onClick={() => navigateToWarga?.({ dusun: area.dusun, rw: area.rw, rt: area.rt, gender: 'Perempuan' })} className="text-right text-xs font-semibold text-rose-800 disabled:opacity-40">{area.perempuan}</button>
               <span className="text-right text-xs font-semibold text-teal-800">{area.homes}</span>
               <span className="text-right text-xs font-semibold text-slate-700">{area.headsOfFamily}</span>
             </div>

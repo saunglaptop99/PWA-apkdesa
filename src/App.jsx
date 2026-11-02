@@ -15,6 +15,7 @@ function MainLayout() {
   const { pengaturanDesa } = useDesa();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [layananSubTab, setLayananSubTab] = useState('bansos');
+  const [wargaNavigationFilter, setWargaNavigationFilter] = useState(null);
 
   useEffect(() => {
     const namaDesa = pengaturanDesa?.nama_desa?.trim();
@@ -24,6 +25,15 @@ function MainLayout() {
   const navigateToLayanan = (subTab = 'bansos') => {
     setLayananSubTab(subTab);
     setActiveTab('layanan');
+  };
+
+  const navigateToWarga = (filter) => {
+    setWargaNavigationFilter((previous) => ({ ...filter, requestId: (previous?.requestId || 0) + 1 }));
+    setActiveTab('warga');
+  };
+
+  const clearWargaNavigationFilter = (requestId) => {
+    setWargaNavigationFilter((current) => current?.requestId === requestId ? null : current);
   };
 
   if (loading) {
@@ -64,9 +74,10 @@ function MainLayout() {
             <DashboardPage
               setActiveTab={setActiveTab}
               navigateToLayanan={navigateToLayanan}
+              navigateToWarga={navigateToWarga}
             />
           )}
-          {activeTab === 'warga' && <WargaPage navigateToLayanan={navigateToLayanan} />}
+          {activeTab === 'warga' && <WargaPage navigateToLayanan={navigateToLayanan} initialFilter={wargaNavigationFilter} onInitialFilterApplied={clearWargaNavigationFilter} />}
           {activeTab === 'layanan' && <LayananPage defaultSubTab={layananSubTab} />}
           {activeTab === 'bansos' && <LayananPage defaultSubTab="bansos" />}
           {activeTab === 'mutasi' && <LayananPage defaultSubTab="mutasi" />}

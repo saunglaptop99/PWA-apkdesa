@@ -48,13 +48,14 @@ export const normalizeWilayah = (val) => {
   return isNaN(parsed) ? trimmed.toLowerCase() : String(parsed);
 };
 
-export default function WargaPage({ navigateToLayanan }) {
+export default function WargaPage({ navigateToLayanan, initialFilter, onInitialFilterApplied }) {
   const { profile, user, isOnline } = useAuth();
   const { pengaturanDesa, getDusunOptions, getRwOptions, getRtOptions } = useDesa();
 
   const [warga, setWarga] = useState([]);
   const [search, setSearch] = useState('');
   const [filterEkonomi, setFilterEkonomi] = useState('all');
+  const [filterGender, setFilterGender] = useState('all');
 
   // Filter Khusus Admin: RT/RW, Dusun, KK, Kepala Keluarga
   const [filterDusun, setFilterDusun] = useState('all');
@@ -78,6 +79,20 @@ export default function WargaPage({ navigateToLayanan }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  useEffect(() => {
+    if (!initialFilter?.requestId) return;
+    setFilterDusun(initialFilter.dusun || 'all');
+    setFilterRw(initialFilter.rw || 'all');
+    setFilterRt(initialFilter.rt || 'all');
+    setFilterGender(initialFilter.gender || 'all');
+    setFilterEkonomi('all');
+    setFilterShdk('all');
+    setFilterNoKk('');
+    setSearch('');
+    setCurrentPage(1);
+    onInitialFilterApplied?.(initialFilter.requestId);
+  }, [initialFilter?.requestId]);
+
   // Dynamic Options untuk Dropdown Wilayah Admin
   const dusunList = useMemo(() => {
     return getDusunOptions ? getDusunOptions() : [];
@@ -100,6 +115,7 @@ export default function WargaPage({ navigateToLayanan }) {
     filterDusun !== 'all' ||
     filterRw !== 'all' ||
     filterRt !== 'all' ||
+    filterGender !== 'all' ||
     filterShdk !== 'all' ||
     Boolean(filterNoKk.trim()) ||
     filterEkonomi !== 'all' ||
@@ -109,6 +125,7 @@ export default function WargaPage({ navigateToLayanan }) {
     setFilterDusun('all');
     setFilterRw('all');
     setFilterRt('all');
+    setFilterGender('all');
     setFilterShdk('all');
     setFilterNoKk('');
     setFilterEkonomi('all');
@@ -262,6 +279,7 @@ export default function WargaPage({ navigateToLayanan }) {
         w.nik?.includes(q) ||
         w.no_kk?.includes(q);
       const matchEkonomi = filterEkonomi === 'all' || w.status_ekonomi === filterEkonomi;
+      const matchGender = filterGender === 'all' || w.jenis_kelamin === filterGender;
 
       // Filter Dusun (Admin)
       const matchDusun =
@@ -294,6 +312,7 @@ export default function WargaPage({ navigateToLayanan }) {
       return (
         matchSearch &&
         matchEkonomi &&
+        matchGender &&
         matchDusun &&
         matchRw &&
         matchRt &&
@@ -305,6 +324,7 @@ export default function WargaPage({ navigateToLayanan }) {
     warga,
     search,
     filterEkonomi,
+    filterGender,
     filterDusun,
     filterRw,
     filterRt,
@@ -424,6 +444,19 @@ export default function WargaPage({ navigateToLayanan }) {
               ×
             </button>
           )}
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar" aria-label="Filter jenis kelamin">
+          <span className="mr-1 flex-shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-500">Jenis kelamin</span>
+          {[
+            { value: 'all', label: 'Semua' },
+            { value: 'Laki-laki', label: 'Laki-laki' },
+            { value: 'Perempuan', label: 'Perempuan' },
+          ].map((item) => (
+            <button key={item.value} type="button" onClick={() => setFilterGender(item.value)} className={`rounded-xl px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-colors ${filterGender === item.value ? 'bg-teal-800 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+              {item.label}
+            </button>
+          ))}
         </div>
 
         {/* PANEL FILTER KHUSUS ADMIN (WILAYAH, KK, & KEPALA KELUARGA) */}
